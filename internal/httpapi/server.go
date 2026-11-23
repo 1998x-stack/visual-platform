@@ -484,9 +484,12 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 	req.SourceName = strings.TrimSpace(req.SourceName)
 	req.ExpectedSHA256 = strings.ToLower(strings.TrimSpace(req.ExpectedSHA256))
 	if !validUploadName(req.SourceName, req.SourceType) ||
-		req.ExpectedSize <= 0 || req.ExpectedSize > s.uploadLimit() ||
-		len(req.ExpectedSHA256) != 64 {
+		req.ExpectedSize <= 0 || len(req.ExpectedSHA256) != 64 {
 		writeProblem(w, r, http.StatusBadRequest, "INVALID_UPLOAD")
+		return
+	}
+	if req.ExpectedSize > s.uploadLimit() {
+		writeProblem(w, r, http.StatusRequestEntityTooLarge, "UPLOAD_TOO_LARGE")
 		return
 	}
 	if _, err := hex.DecodeString(req.ExpectedSHA256); err != nil {
