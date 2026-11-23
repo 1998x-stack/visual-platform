@@ -130,8 +130,10 @@ M3-A only validates ZIP structure and content integrity. It does not detect all 
 M3-B must add:
 
 - A separate Worker-only Quarantine reader with prefix-scoped `s3:GetObject` permission only; application code reads one exact DB-provided key and has no listing / write / delete operation.
-- ClamAV (or an approved scanner) integration with explicit scan timeout, max file size, max total scan size, recursion, and file-count limits.
-- Configure scanner limits so oversized / skipped entries are reported (for ClamAV, review `AlertExceedsMax` / `--alert-exceeds-max` behavior); an incomplete scan must never be treated as clean.
+- ClamAV (or an approved scanner) integration that scans every Manifest entry by its validated `source_path` and streams decompressed bytes using `INSTREAM`; standalone HTML is streamed directly.
+- Configure `StreamMaxLength`, max file size, max scan size, max recursion, max files, scan timeout, and worker-side concurrency / queue bounds.
+- Enable ClamAV's exceeds-limit alert behavior (`CL_SCAN_HEURISTIC_EXCEEDS_MAX` / the corresponding daemon configuration); ClamAV documents that files beyond `--max-filesize` can otherwise be skipped and assumed clean. Any limit hit, skipped file, parse failure, or incomplete result must fail closed.
+- Prefer a Unix socket for clamd. If TCP is used, keep it on a private network: ClamAV documents that its TCP socket does not authenticate clients.
 - Fail-closed behavior for scanner unavailable, timeout, unsupported archive, or incomplete scan.
 - No public VirusTotal upload or other third-party content disclosure by default.
 
@@ -144,7 +146,13 @@ M3-C / M4 must add:
 
 The management site and user Artifact content must use different registrable domains and per-Artifact Origins. Antivirus success does not make browser content safe.
 
-## 9. Test requirements
+## 9. M3-B scanner implementation notes
+
+The scanner adapter should expose a small interface such as `Scan(ctx, reader, declaredSize) -> ScanResult`; it must not expose ClamAV socket details to the API layer. Use bounded `INSTREAM` chunks and verify the daemon's terminal response. For ZIP, scan each validated Manifest entry separately using `source_path`; require exactly one terminal clean result per entry. This avoids treating a container-level `OK` as proof that every manifest entry was scanned. Keep the original ZIP SHA-256 / size bound and the per-entry SHA-256 / size bound attached to the scan record.
+
+The scanner runs isolated from the public network and production credentials, with read-only signature data and explicit CPU / memory / process limits. Signature freshness is part of scanner health; stale definitions, daemon restart, timeout, protocol error, or missing per-entry result are not clean outcomes.
+
+## 10. Test requirements
 
 Automated tests cover:
 
@@ -161,12 +169,14 @@ Automated tests cover:
 Before M3-A is merged, run `gofmt`, `go mod tidy`, `go vet ./...`, `go build ./...`, and `go test -race -count=1 ./...` on Go 1.27.4 with PostgreSQL 18. CI also runs a 10-second ZIP-validator fuzz smoke test. Run an extended local fuzz campaign separately and record duration / coverage / corpus; the CI smoke test is not a substitute.
 
 
-## 10. References
+## 11. References
 
 - OWASP File Upload Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
 - OWASP Path Traversal Prevention Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Path_Traversal_Prevention_Cheat_Sheet.html
 - Go 1.27.4 archive/zip: https://pkg.go.dev/archive/zip@go1.27.4
-- ClamAV clamd.conf reference (scan size, file size, recursion, file count and scan time): https://github.com/Cisco-Talos/clamav/blob/main/docs/man/clamd.conf.5.in
+- ClamAV scanning guide (daemon TCP authentication warning, stream mode, and max-filesize behavior): https://docs.clamav.net/manual/Usage/Scanning.html
+- ClamD protocol (INSTREAM framing and StreamMaxLength): https://docs.clamav.net/manual/Usage/ClamdProtocol.html
+- ClamAV libclamav flags (exceeds-max heuristic): https://docs.clamav.net/manual/Development/libclamav.html
 
 
 - MinIO Policy-Based Access Control: https://docs.min.io/aistor/administration/iam/access/
