@@ -429,7 +429,6 @@ func makeZIPForFuzz(name, body string) []byte {
 	return buffer.Bytes()
 }
 
-
 func TestValidateHTMLBuildsManifest(t *testing.T) {
 	data := []byte("<!doctype html><html><body>hello</body></html>")
 	manifest, err := ValidateHTML(context.Background(), bytes.NewReader(data), int64(len(data)), 0)
