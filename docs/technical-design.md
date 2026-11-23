@@ -70,7 +70,7 @@ M3-A 在独立 `internal/validator` 包中实现 ZIP 与 standalone HTML 验证�
 
 M3-A 的默认限制是 ZIP 100 MiB、中央目录 8 MiB、条目 5,000、文件 4,000、单文件解压 64 MiB、总解压 512 MiB、压缩比 100、路径 1,024 bytes / 32 层；standalone HTML 默认 10 MiB。这些是 MVP 初始边界，必须通过真实构建产物和压测校准。
 
-**重要边界：** M3-A 只做结构和完整性验证，不提供病毒扫描，也不表示 HTML / JavaScript 安全。M3-B 必须通过独立 Worker 凭据读取 Quarantine：MinIO IAM 自定义策略限制在 quarantine 对象前缀，只授予 `s3:GetObject`，不授予 `s3:ListBucket` / `PutObject` / `DeleteObject`；Worker 代码只读取 Upload Session 数据库记录中的精确 ObjectKey。若需要每个 Job 的 IAM 级精确对象约束，再评估短时 STS Session Policy / Presigned GET。ClamAV 不可用或扫描不完整视为未通过；M3-C / M4 再将验证状态和 Manifest 持久化并接入异步任务。Manifest 不能直接触发发布。
+**重要边界：** M3-A 只做结构和完整性验证，不提供病毒扫描，也不表示 HTML / JavaScript 安全。M3-B 必须通过独立 Worker 凭据读取 Quarantine：MinIO IAM 自定义策略限制在 quarantine 对象前缀，只授予 `s3:GetObject`，不授予 `s3:ListBucket` / `PutObject` / `DeleteObject`；Worker 代码只读取 Upload Session 数据库记录中的精确 ObjectKey。若需要每个 Job 的 IAM 级精确对象约束，再评估短时 STS Session Policy / Presigned GET。ClamAV 通过 `INSTREAM` 对 Manifest 中每个 `source_path` 对应的解压文件逐项扫描；必须收到与 Manifest 文件数一致的 clean 终态。配置 StreamMaxLength / MaxFileSize / MaxScanSize / MaxRecursion / MaxFiles / MaxScanTime，并启用 exceeds-max 告警；任何跳过、超限、解析失败、超时、签名库过期或 daemon 不可用都视为未通过。clamd 优先使用 Unix socket；TCP socket 不提供客户端认证，若使用必须限制在私有网络。M3-C / M4 再将验证状态和 Manifest 持久化并接入异步任务。Manifest 不能直接触发发布。
 
 MinIO Go SDK v7.4.1 接入单一预先创建的私有 Quarantine Bucket。启动时检查 Bucket 存在和 Bucket Policy 为空；不自动创建 Bucket。生产环境应为 API 提供仅作用于 Quarantine Bucket 的专用最小权限凭据。当前采用 API 代理上传，不返回预签名 URL。
 
