@@ -24,7 +24,7 @@ This repository contains public design documentation and the beginnings of a pri
 M0: Go API skeleton, PostgreSQL schema, dev setup, CI, fail-closed worker/gateway stubs — implemented baseline.
 M1: Workspace / Artifact metadata, role and ACL policy, developer-only REST API — implemented baseline.
 M2: Upload Session, quota reservation, streamed checksum-verified private Quarantine storage — implemented baseline; production operations are not complete.
-M3-A: ZIP Validation Core is under review on `feat/m3-zip-validation-core`; not merged or integrated with Worker.
+M3-A: ZIP + standalone HTML Validation Core is under review on `feat/m3-zip-validation-core`; CI structural checks pass, but it is not merged or integrated with Worker.
 M3-B/C and M4–M10: NOT IMPLEMENTED.
 
 ## Review commands

@@ -1,13 +1,13 @@
-# M3-A · ZIP Validation Core Specification
+# M3-A · ZIP and Standalone HTML Validation Core Specification
 
 - Status: Implementation in review on `feat/m3-zip-validation-core`
 - Date: 2026-11-24
-- Scope: deterministic ZIP structure validation and Manifest generation only
+- Scope: deterministic ZIP structure validation, standalone HTML byte validation, and Manifest generation only
 - Non-goal: production publication, antivirus verdict, browser sandbox, Worker orchestration
 
 ## 1. Purpose
 
-M2 receives a byte-exact upload into a private Quarantine bucket. It does not establish that the bytes are a valid static site. M3-A adds a bounded, deterministic parser that accepts only a constrained static-site ZIP and emits a content Manifest.
+M2 receives a byte-exact upload into a private Quarantine bucket. It does not establish that the bytes are a valid static site. M3-A adds a bounded, deterministic validator for a constrained static-site ZIP or a standalone HTML file and emits the same content Manifest contract.
 
 A Manifest is an inventory and integrity record. It is **not** a malware verdict, trust label, authorization grant, or publication command.
 
@@ -16,14 +16,17 @@ A Manifest is an inventory and integrity record. It is **not** a malware verdict
 Input:
 
 - A seekable `io.ReaderAt` over a private, bounded source.
-- The exact archive byte length from the Upload Session.
-- Explicit resource limits.
+- The exact source byte length from the Upload Session.
+- Explicit server-controlled resource limits.
+- ZIP uploads use the ZIP limits below; standalone HTML defaults to 10 MiB.
 
 Output:
 
 - Manifest schema version 1.
-- A sorted list of regular files with normalized path, actual byte length, SHA-256, and server-derived MIME.
+- A sorted list of regular files with normalized publish path, original `source_path`, actual byte length, SHA-256, and server-derived MIME.
 - Aggregate uncompressed bytes and source archive size.
+
+For standalone HTML, the validator maps the exact uploaded bytes to `index.html`, checks the declared source length against the bounded reader, and calculates SHA-256. It does not parse or sanitize HTML.
 
 The validator does not:
 
@@ -62,6 +65,7 @@ No extraction path is ever constructed. ZIP names are logical object paths only.
 | Limit | Default | Purpose |
 |---|---:|---|
 | Compressed archive | 100 MiB | Align with current M2 single-upload default |
+| Standalone HTML | 10 MiB | Bound a single active HTML document |
 | Central directory | 8 MiB | Bound parser metadata allocation |
 | Total ZIP entries | 5,000 | Bound directory metadata |
 | Regular files | 4,000 | Bound Manifest and file-open count |
@@ -111,7 +115,8 @@ Top-level fields:
 
 Each entry:
 
-- `path`
+- `path` (normalized publish path)
+- `source_path` (original ZIP entry path; `index.html` for standalone HTML)
 - `size`
 - `sha256`
 - `content_type`
@@ -144,6 +149,7 @@ The management site and user Artifact content must use different registrable dom
 Automated tests cover:
 
 - Valid root index and one-level wrapper directory.
+- Standalone HTML exact-length read, SHA-256, size limit, and cancellation.
 - ZIP Slip, absolute paths, Windows drive / device names, backslashes, hidden paths, encoded delimiters, malformed segments.
 - Duplicate entries, case-fold collisions, file / directory conflicts.
 - Symlink and special-file rejection.

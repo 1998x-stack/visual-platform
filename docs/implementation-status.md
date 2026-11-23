@@ -9,7 +9,7 @@
 | M0 工程骨架 | 已实现 | Go API、结构化日志、健康 / 就绪检查、开发配置、CI | Worker / Gateway 仍为显式失败的 Stub |
 | M1 领域与权限 | 已实现 | Workspace、成员角色、Artifact 元数据、ACL、Authorizer、审计 | 企业 OIDC / 组织目录未实现 |
 | M2 上传隔离 | 已实现（开发基线） | Upload Session、配额预留、流式 Quarantine 写入、SHA-256、会话租约、重试、状态审计 | 生产级 MinIO 部署、生命周期清理 Worker、断点续传、多段上传未实现 |
-| M3 ZIP Validator | 进行中（M3-A 分支） | 无磁盘解压的 ZIP Validation Core、中央目录预检、路径 / 类型 / 大小 / 压缩比 / 数据重叠检查、CRC / SHA-256、确定性 Manifest、攻击样本与 Fuzz 种子测试 | 尚未合并；尚未接入 Quarantine Reader、ClamAV、Job Worker、数据库状态和 Manifest 持久化 |
+| M3 ZIP Validator | 进行中（M3-A 分支） | ZIP / standalone HTML Validation Core、无磁盘解压、中央目录预检、路径 / 类型 / 大小 / 压缩比 / 数据重叠检查、CRC / SHA-256、确定性 Manifest、攻击样本与 Fuzz 种子测试 | 尚未合并；尚未接入 Quarantine Reader、ClamAV、Job Worker、数据库状态和 Manifest 持久化 |
 | M4 Job / Worker | 未实现 | — | SKIP LOCKED、Lease、Retry、Outbox、幂等消费 |
 | M5 Publisher | 未实现 | — | 不可变对象版本、Manifest 校验、原子指针切换、回滚 |
 | M6 Static Gateway | 未实现 | — | Host Mapping、每请求授权、路径规范化、响应安全头 |
@@ -113,8 +113,8 @@ CI 在 PostgreSQL 18 上运行：
 - 以 Unicode case-fold 后的路径键检测重复项、大小写冲突和文件 / 目录前缀冲突。
 - 检查单文件大小、总解压大小、压缩比、文件数、压缩数据区间重叠；读取每个文件到 EOF，触发 ZIP CRC 校验并计算 SHA-256。
 - 要求根目录存在精确小写 `index.html`；若所有文件均处于同一个顶层目录且不存在根 index，则剥离这一层目录。
-- 生成排序稳定的 Manifest v1，包含路径、大小、SHA-256、服务端 MIME、源大小和总解压大小。
-- 加入 ZIP Slip、Symlink、重复路径、大小写冲突、压缩炸弹、加密、ZIP64、CRC、缺少 index 和 Fuzz seed 测试。
+- ZIP 与单 HTML 均生成排序稳定的 Manifest v1；ZIP 条目同时保留发布路径和原始 archive source_path，包含大小、SHA-256、服务端 MIME、源大小和总解压大小。
+- 加入 ZIP Slip、Symlink、重复路径、大小写冲突、压缩炸弹、加密、ZIP64、CRC、缺少 index、单 HTML 大小 / 源长度 / 取消上下文和 Fuzz seed 测试。
 
 ### 当前不代表什么
 - M3-A 是纯验证核心，不会从 S3 读取对象，不会写数据库，不会触发异步任务。

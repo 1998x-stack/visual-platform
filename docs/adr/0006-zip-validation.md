@@ -11,13 +11,13 @@ The next stage must inspect untrusted ZIP metadata and decompressed content with
 
 ## Decision
 
-1. Implement a pure `internal/validator` package that accepts a bounded `io.ReaderAt` and exact source size.
+1. Implement a pure `internal/validator` package that accepts a bounded `io.ReaderAt` and exact source size for ZIP and standalone HTML uploads.
 2. Do not extract archive entries to the host filesystem. Read each entry through `archive/zip.File.Open`, with a hard reader limit, and compute SHA-256.
 3. Preflight EOCD / central-directory metadata before `zip.NewReader` to bound entry count and central-directory memory. Reject ZIP64 and multi-disk archives in the MVP.
 4. Reject absolute / traversal / ambiguous paths, non-NFC paths, hidden segments, Windows reserved names, duplicate / case-fold collisions, file-directory conflicts, symlinks, special files, encrypted entries, unsupported compression, server-side executable extensions, and nested archive extensions.
 5. Enforce compressed archive, central directory, entry count, regular file count, per-file uncompressed bytes, aggregate uncompressed bytes, compression ratio, path byte length, and path depth limits.
-6. Read every accepted file to EOF so decompression and CRC checks run; compare actual bytes with declared sizes and generate a deterministic Manifest v1.
-7. Require root `index.html`, allowing exactly one common top-level wrapper directory to be stripped when every regular file is nested beneath it.
+6. Read every accepted ZIP file to EOF so decompression and CRC checks run; compare actual bytes with declared sizes and generate a deterministic Manifest v1. For a standalone HTML file, enforce a separate 10 MiB default size limit and hash the exact source bytes into the same Manifest shape.
+7. Require root `index.html`, allowing exactly one common top-level wrapper directory to be stripped when every regular file is nested beneath it. Preserve the original ZIP `source_path` separately from the normalized publish `path` so a later Publisher can map bytes correctly.
 8. Keep M2 Upload API storage permissions unchanged. A future Worker must receive a separate exact-key read-only Quarantine identity.
 9. Treat Manifest success as structural integrity only. It is not an antivirus verdict, browser-safety verdict, or publication authorization.
 

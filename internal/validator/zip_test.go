@@ -90,8 +90,11 @@ func TestValidateZIPBuildsDeterministicManifest(t *testing.T) {
 	if manifest.Entries[2].SHA256 != hex.EncodeToString(expected[:]) {
 		t.Fatalf("index SHA-256 = %q, want %x", manifest.Entries[2].SHA256, expected)
 	}
-	if manifest.Entries[2].ContentType != "text/html; charset=utf-8" {
+	if manifest.Entries[2].ContentType != "text/html" {
 		t.Fatalf("index content type = %q", manifest.Entries[2].ContentType)
+	}
+	if manifest.Entries[2].SourcePath != "dist/index.html" {
+		t.Fatalf("index source path = %q, want dist/index.html", manifest.Entries[2].SourcePath)
 	}
 	if manifest.TotalUncompressedBytes != uint64(len("<html>ok</html>")+len("console.log('ok')")+len("body{margin:0}")) {
 		t.Fatalf("unexpected uncompressed total: %d", manifest.TotalUncompressedBytes)
@@ -424,4 +427,53 @@ func makeZIPForFuzz(name, body string) []byte {
 		return nil
 	}
 	return buffer.Bytes()
+}
+
+
+func TestValidateHTMLBuildsManifest(t *testing.T) {
+	data := []byte("<!doctype html><html><body>hello</body></html>")
+	manifest, err := ValidateHTML(context.Background(), bytes.NewReader(data), int64(len(data)), 0)
+	if err != nil {
+		t.Fatalf("ValidateHTML() error = %v", err)
+	}
+	if manifest.SchemaVersion != 1 || manifest.IndexFile != "index.html" {
+		t.Fatalf("unexpected HTML manifest header: %+v", manifest)
+	}
+	if manifest.EntryCount != 1 || len(manifest.Entries) != 1 {
+		t.Fatalf("HTML entry count = %d, entries = %d", manifest.EntryCount, len(manifest.Entries))
+	}
+	entry := manifest.Entries[0]
+	expected := sha256.Sum256(data)
+	if entry.Path != "index.html" || entry.SourcePath != "index.html" {
+		t.Fatalf("unexpected HTML paths: %+v", entry)
+	}
+	if entry.SHA256 != hex.EncodeToString(expected[:]) || entry.Size != uint64(len(data)) {
+		t.Fatalf("unexpected HTML integrity metadata: %+v", entry)
+	}
+	if entry.ContentType != "text/html" || manifest.TotalUncompressedBytes != uint64(len(data)) {
+		t.Fatalf("unexpected HTML content metadata: %+v", manifest)
+	}
+}
+
+func TestValidateHTMLEnforcesSizeAndExactSourceLength(t *testing.T) {
+	data := []byte("<html>size check</html>")
+	_, err := ValidateHTML(context.Background(), bytes.NewReader(data), int64(len(data)), 4)
+	if code := validationCode(t, err); code != CodeFileTooLarge {
+		t.Fatalf("size limit code = %q, want %q", code, CodeFileTooLarge)
+	}
+
+	_, err = ValidateHTML(context.Background(), bytes.NewReader(data), int64(len(data)+1), 0)
+	if code := validationCode(t, err); code != CodeSizeMismatch {
+		t.Fatalf("source length code = %q, want %q", code, CodeSizeMismatch)
+	}
+}
+
+func TestValidateHTMLHonorsCanceledContext(t *testing.T) {
+	data := []byte("<html>cancel</html>")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := ValidateHTML(ctx, bytes.NewReader(data), int64(len(data)), 0)
+	if code := validationCode(t, err); code != CodeCanceled {
+		t.Fatalf("error code = %q, want %q", code, CodeCanceled)
+	}
 }

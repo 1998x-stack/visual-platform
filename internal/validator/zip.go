@@ -22,6 +22,7 @@ import (
 
 const (
 	defaultMaxArchiveBytes         int64  = 100 << 20
+	defaultMaxHTMLBytes            int64  = 10 << 20
 	defaultMaxCentralDirectorySize uint64 = 8 << 20
 	defaultMaxEntries                     = 5000
 	defaultMaxFiles                       = 4000
@@ -127,15 +128,17 @@ type Manifest struct {
 // ManifestEntry describes one regular file in the validated archive.
 type ManifestEntry struct {
 	Path        string `json:"path"`
+	SourcePath  string `json:"source_path"`
 	Size        uint64 `json:"size"`
 	SHA256      string `json:"sha256"`
 	ContentType string `json:"content_type"`
 }
 
 type candidate struct {
-	file *zip.File
-	path string
-	size uint64
+	file       *zip.File
+	path       string
+	sourcePath string
+	size       uint64
 }
 
 type dataRange struct {
@@ -267,7 +270,12 @@ func ValidateZIP(ctx context.Context, source io.ReaderAt, archiveSize int64, lim
 		if file.CompressedSize64 > 0 {
 			ranges = append(ranges, dataRange{start: start, end: start + file.CompressedSize64})
 		}
-		candidates = append(candidates, candidate{file: file, path: cleanPath, size: file.UncompressedSize64})
+		candidates = append(candidates, candidate{
+			file:       file,
+			path:       cleanPath,
+			sourcePath: cleanPath,
+			size:       file.UncompressedSize64,
+		})
 	}
 
 	if len(candidates) == 0 {
@@ -327,6 +335,7 @@ func ValidateZIP(ctx context.Context, source io.ReaderAt, archiveSize int64, lim
 
 		manifest.Entries = append(manifest.Entries, ManifestEntry{
 			Path:        item.path,
+			SourcePath:  item.sourcePath,
 			Size:        uint64(actualSize),
 			SHA256:      hex.EncodeToString(hasher.Sum(nil)),
 			ContentType: contentTypeFor(item.path),
@@ -340,6 +349,51 @@ func ValidateZIP(ctx context.Context, source io.ReaderAt, archiveSize int64, lim
 		return manifest.Entries[i].Path < manifest.Entries[j].Path
 	})
 	return manifest, nil
+}
+
+// ValidateHTML creates the same Manifest shape for a standalone HTML upload.
+ // It hashes the exact source bytes and does not parse, sanitize, or execute HTML.
+func ValidateHTML(ctx context.Context, source io.ReaderAt, sourceSize, maxHTMLBytes int64) (Manifest, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if source == nil || sourceSize < 0 || maxHTMLBytes < 0 {
+		return Manifest{}, reject(CodeInvalidArchive, "", errors.New("invalid HTML source or size"))
+	}
+	if maxHTMLBytes == 0 {
+		maxHTMLBytes = DefaultMaxHTMLBytes
+	}
+	if sourceSize > maxHTMLBytes {
+		return Manifest{}, reject(CodeFileTooLarge, "index.html", nil)
+	}
+
+	hasher := sha256.New()
+	section := io.NewSectionReader(source, 0, sourceSize)
+	actualSize, err := io.Copy(hasher, &contextReader{ctx: ctx, reader: section})
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return Manifest{}, reject(CodeCanceled, "index.html", err)
+		}
+		return Manifest{}, reject(CodeCorruptEntry, "index.html", err)
+	}
+	if actualSize != sourceSize {
+		return Manifest{}, reject(CodeSizeMismatch, "index.html", nil)
+	}
+
+	return Manifest{
+		SchemaVersion:          1,
+		IndexFile:              "index.html",
+		SourceSize:             sourceSize,
+		EntryCount:             1,
+		TotalUncompressedBytes: uint64(actualSize),
+		Entries: []ManifestEntry{{
+			Path:        "index.html",
+			SourcePath:  "index.html",
+			Size:        uint64(actualSize),
+			SHA256:      hex.EncodeToString(hasher.Sum(nil)),
+			ContentType: "text/html",
+		}},
+	}, nil
 }
 
 func normalizeLimits(limits Limits) (Limits, error) {
@@ -639,17 +693,17 @@ func contentTypeFor(name string) string {
 	extension := strings.ToLower(path.Ext(name))
 	switch extension {
 	case ".html", ".htm":
-		return "text/html; charset=utf-8"
+		return "text/html"
 	case ".css":
-		return "text/css; charset=utf-8"
+		return "text/css"
 	case ".js", ".mjs":
-		return "text/javascript; charset=utf-8"
+		return "text/javascript"
 	case ".json", ".map":
 		return "application/json"
 	case ".svg":
 		return "image/svg+xml"
 	case ".txt", ".md", ".csv":
-		return "text/plain; charset=utf-8"
+		return "text/plain"
 	case ".xml":
 		return "application/xml"
 	case ".png":

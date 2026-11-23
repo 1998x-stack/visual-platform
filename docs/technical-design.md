@@ -59,16 +59,16 @@ ZIP 必须拒绝绝对路径、盘符、反斜杠、NUL、越界段、symlink �
 
 ### 5.2 M3-A ZIP Validation Core
 
-M3-A 在独立 `internal/validator` 包中实现纯 ZIP 结构验证，输入为有大小上限的 `io.ReaderAt`。实现不执行文件系统解压，不使用 ZIP 条目名称构造本地路径：
+M3-A 在独立 `internal/validator` 包中实现 ZIP 与 standalone HTML 验证，输入为有大小上限的 `io.ReaderAt`。ZIP 实现不执行文件系统解压，不使用 ZIP 条目名称构造本地路径；单 HTML 通过同一 Manifest 契约计算实际字节数和 SHA-256：
 
 1. 在 `archive/zip.NewReader` 解析中央目录之前检查 EOCD，限制中央目录大小和条目数，拒绝 ZIP64 / 多卷 ZIP，避免先分配不受限的目录元数据。
 2. 只接受 Store / Deflate；拒绝加密条目、Symlink、特殊文件、服务端执行扩展名和嵌套归档扩展名。
 3. 校验 UTF-8、NFC、路径段、Windows 保留名、隐藏路径、长度 / 深度；使用 Unicode case-fold 检查重复、大小写冲突和文件 / 目录前缀冲突。
 4. 预检声明的压缩大小、解压大小、单文件大小、总大小、压缩比和压缩数据区间；随后逐项读取到 EOF，验证 CRC、实际字节数并计算 SHA-256。
 5. 要求根目录 `index.html`；仅当全部文件处于同一公共顶层目录且不存在根 index 时，才剥离该目录。
-6. 输出按路径排序的 Manifest v1：每个文件包含规范路径、实际大小、SHA-256 和服务端 MIME。
+6. 输出按发布路径排序的 Manifest v1：每个文件包含规范发布路径、原始 `source_path`、实际大小、SHA-256 和服务端 MIME。Standalone HTML 固定映射为 `index.html`。
 
-M3-A 的默认限制是 ZIP 100 MiB、中央目录 8 MiB、条目 5,000、文件 4,000、单文件解压 64 MiB、总解压 512 MiB、压缩比 100、路径 1,024 bytes / 32 层。这些是 MVP 初始边界，必须通过真实构建产物和压测校准。
+M3-A 的默认限制是 ZIP 100 MiB、中央目录 8 MiB、条目 5,000、文件 4,000、单文件解压 64 MiB、总解压 512 MiB、压缩比 100、路径 1,024 bytes / 32 层；standalone HTML 默认 10 MiB。这些是 MVP 初始边界，必须通过真实构建产物和压测校准。
 
 **重要边界：** M3-A 只做结构和完整性验证，不提供病毒扫描，也不表示 HTML / JavaScript 安全。M3-B 必须通过独立 Worker 只读凭据读取 Quarantine，并将 ClamAV 不可用视为扫描未通过；M3-C / M4 再将验证状态和 Manifest 持久化并接入异步任务。Manifest 不能直接触发发布。
 
