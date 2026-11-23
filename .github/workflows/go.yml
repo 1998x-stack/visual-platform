@@ -82,5 +82,5 @@ jobs:
           DB_TEST_URL: postgres://visual:visualtest@127.0.0.1:5432/visual?sslmode=disable
         run: go test -race -count=1 ./...
 
-      - name: ZIP validator fuzz smoke test
+      - name: ZIP validator 10-second fuzz smoke test
         run: go test ./internal/validator -run=^$ -fuzz=FuzzValidateZIPDoesNotPanic -fuzztime=10s -parallel=2
