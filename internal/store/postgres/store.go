@@ -389,7 +389,16 @@ func validUploadInput(name, kind string, size int64, checksum string) bool {
 		strings.IndexFunc(name, unicode.IsControl) >= 0 || size <= 0 {
 		return false
 	}
-	if kind != "html" && kind != "zip" {
+	lowerName := strings.ToLower(name)
+	if kind == "html" {
+		if !strings.HasSuffix(lowerName, ".html") && !strings.HasSuffix(lowerName, ".htm") {
+			return false
+		}
+	} else if kind == "zip" {
+		if !strings.HasSuffix(lowerName, ".zip") {
+			return false
+		}
+	} else {
 		return false
 	}
 	checksum = strings.ToLower(strings.TrimSpace(checksum))
@@ -405,7 +414,7 @@ func (s *Store) CreateUploadSession(ctx context.Context, actorID, artifactID, so
 	if !validUploadInput(sourceName, sourceType, expectedSize, expectedSHA256) {
 		return result, ErrConflict
 	}
-	expectedSHA256 = strings.ToLower(expectedSHA256)
+	expectedSHA256 = strings.ToLower(strings.TrimSpace(expectedSHA256))
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return result, err
