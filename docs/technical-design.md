@@ -45,7 +45,7 @@ Cookie 使用 __Host- 前缀、Secure、HttpOnly、SameSite=Lax、Path=/，不�
 
 失败进入 REJECTED / FAILED / REVIEW_REQUIRED。任务由 PostgreSQL Job 表驱动，使用 SKIP LOCKED、lease_until、attempt_count、next_retry_at 和幂等键。业务状态和 Outbox Event 在同一数据库事务中提交。
 
-ZIP 必须拒绝绝对路径、盘符、反斜杠、NUL、越界段、symlink 和特殊文件；检测重复路径、大小写 / Unicode 规范化冲突；按实际解压流累计总字节；限制文件数、单文件大小、压缩比、目录深度、CPU、内存、磁盘和时限。MVP 不递归展开嵌套 ZIP。默认入口为根目录 index.html。MIME 由服务端 Manifest 生成。
+ZIP 必须拒绝绝对路径、盘符、反斜杠、NUL、越界段、symlink 和特殊文件；检测重复路径、大小写 / Unicode 规范化冲突；按实际解压流累计总字节；限制文件数、单文件大小、压缩比、目录深度、中央目录大小和处理时限。MVP 不递归展开嵌套 ZIP，也不将用户路径解压到服务器文件系统。默认入口为根目录精确小写 index.html；MIME 由服务端 Manifest 生成。
 
 ### 5.1 M2 已实现的上传接口
 
@@ -56,6 +56,21 @@ ZIP 必须拒绝绝对路径、盘符、反斜杠、NUL、越界段、symlink �
 - API 使用 UUID 生成 object key；客户端文件名不参与路径构造；存储 Content-Type 固定为 application/octet-stream。
 - SHA-256 服务端重新计算，成功后原子更新 quota reserved / used 和 upload status。
 - M2 当前不解压 ZIP、不扫描、不创建 Manifest、不发布，也不暴露对象下载能力。
+
+### 5.2 M3-A ZIP Validation Core
+
+M3-A 在独立 `internal/validator` 包中实现 ZIP 与 standalone HTML 验证，输入为有大小上限的 `io.ReaderAt`。ZIP 实现不执行文件系统解压，不使用 ZIP 条目名称构造本地路径；单 HTML 通过同一 Manifest 契约计算实际字节数和 SHA-256：
+
+1. 在 `archive/zip.NewReader` 解析中央目录之前检查 EOCD，限制中央目录大小和条目数，拒绝 ZIP64 / 多卷 ZIP，避免先分配不受限的目录元数据。
+2. 只接受 Store / Deflate；拒绝加密条目、Symlink、特殊文件、服务端执行扩展名和嵌套归档扩展名。
+3. 校验 UTF-8、NFC、路径段、Windows 保留名、隐藏路径、长度 / 深度；使用 Unicode case-fold 检查重复、大小写冲突和文件 / 目录前缀冲突。
+4. 预检声明的压缩大小、解压大小、单文件大小、总大小、压缩比和压缩数据区间；随后逐项读取到 EOF，验证 CRC、实际字节数并计算 SHA-256。
+5. 要求根目录 `index.html`；仅当全部文件处于同一公共顶层目录且不存在根 index 时，才剥离该目录。
+6. 输出按发布路径排序的 Manifest v1：每个文件包含规范发布路径、原始 `source_path`、实际大小、SHA-256 和服务端 MIME。Standalone HTML 固定映射为 `index.html`。
+
+M3-A 的默认限制是 ZIP 100 MiB、中央目录 8 MiB、条目 5,000、文件 4,000、单文件解压 64 MiB、总解压 512 MiB、压缩比 100、路径 1,024 bytes / 32 层；standalone HTML 默认 10 MiB。这些是 MVP 初始边界，必须通过真实构建产物和压测校准。
+
+**重要边界：** M3-A 只做结构和完整性验证，不提供病毒扫描，也不表示 HTML / JavaScript 安全。M3-B 必须通过独立 Worker 凭据读取 Quarantine：MinIO IAM 自定义策略限制在 quarantine 对象前缀，只授予 `s3:GetObject`，不授予 `s3:ListBucket` / `PutObject` / `DeleteObject`；Worker 代码只读取 Upload Session 数据库记录中的精确 ObjectKey。若需要每个 Job 的 IAM 级精确对象约束，再评估短时 STS Session Policy / Presigned GET。ClamAV 通过 `INSTREAM` 对 Manifest 中每个 `source_path` 对应的解压文件逐项扫描；必须收到与 Manifest 文件数一致的 clean 终态。配置 StreamMaxLength / MaxFileSize / MaxScanSize / MaxRecursion / MaxFiles / MaxScanTime，并启用 exceeds-max 告警；任何跳过、超限、解析失败、超时、签名库过期或 daemon 不可用都视为未通过。clamd 优先使用 Unix socket；TCP socket 不提供客户端认证，若使用必须限制在私有网络。M3-C / M4 再将验证状态和 Manifest 持久化并接入异步任务。Manifest 不能直接触发发布。
 
 MinIO Go SDK v7.4.1 接入单一预先创建的私有 Quarantine Bucket。启动时检查 Bucket 存在和 Bucket Policy 为空；不自动创建 Bucket。生产环境应为 API 提供仅作用于 Quarantine Bucket 的专用最小权限凭据。当前采用 API 代理上传，不返回预签名 URL。
 
@@ -123,6 +138,7 @@ M0 工程骨架；M1 Workspace / Artifact / ACL；M2 Quarantine / ZIP Validator�
 ## 13. 参考资料
 
 - OWASP File Upload: https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
+- OWASP Path Traversal Prevention: https://cheatsheetseries.owasp.org/cheatsheets/Path_Traversal_Prevention_Cheat_Sheet.html
 - OWASP Authorization: https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html
 - MDN Same-origin: https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Same-origin_policy
 - MDN CSP: https://developer.mozilla.org/en-US/docs/Web/Security/Practical_implementation_guides/CSP

@@ -94,12 +94,13 @@ npm run build:pdf
 
 ## 工程状态
 
-**M0 / M1 / M2 已有可编译 Go 代码和 PostgreSQL 集成测试；尚不是生产可用的文件托管服务。**
+**M0 / M1 / M2 已有 Go 代码和 PostgreSQL 集成测试；M3-A 验证核心正在独立 PR 中，尚未合并或接入 Worker。项目仍不是生产可用的文件托管服务。**
 
 - M0：Go API、健康检查、开发配置、CI。
 - M1：Workspace / Artifact / RBAC / ACL。
 - M2：Upload Session、Workspace Quota、流式上传、SHA-256 校验、私有 Quarantine 对象存储。
-- M3：ZIP 安全解包、路径 / Symlink / ZIP Bomb 防护、Manifest、内容扫描，尚未实现。
+- M3-A：ZIP 与 standalone HTML Validation Core 已在 `feat/m3-zip-validation-core` 分支实现；Go / PostgreSQL CI 与 10 秒 Fuzz smoke 通过，PR #4 仍为 Draft；本地扩展 Fuzz 待执行。
+- M3-B/C：Quarantine Reader、恶意软件扫描和 Validation State Integration 尚未实现。
 - M4+：Job Worker、不可变发布、Static Gateway、企业 OIDC，尚未实现。
 
 详细状态见 [implementation-status.md](docs/implementation-status.md)。

@@ -1,6 +1,6 @@
 # Visual Platform 实施状态与安全边界
 
-更新日期：2026-11-23
+更新日期：2026-11-24
 
 ## 阶段状态
 
@@ -9,7 +9,7 @@
 | M0 工程骨架 | 已实现 | Go API、结构化日志、健康 / 就绪检查、开发配置、CI | Worker / Gateway 仍为显式失败的 Stub |
 | M1 领域与权限 | 已实现 | Workspace、成员角色、Artifact 元数据、ACL、Authorizer、审计 | 企业 OIDC / 组织目录未实现 |
 | M2 上传隔离 | 已实现（开发基线） | Upload Session、配额预留、流式 Quarantine 写入、SHA-256、会话租约、重试、状态审计 | 生产级 MinIO 部署、生命周期清理 Worker、断点续传、多段上传未实现 |
-| M3 ZIP Validator | 未实现 | — | ZIP Slip / Symlink / ZIP Bomb、规范化冲突、Manifest、恶意内容扫描 |
+| M3 ZIP Validator | 进行中（PR #4；CI 通过） | ZIP / standalone HTML Validation Core、无磁盘解压、中央目录预检、路径 / 类型 / 大小 / 压缩比 / 数据重叠检查、CRC / SHA-256、确定性 Manifest、攻击样本与 10 秒 Fuzz smoke（最新代码 revision 425,209 execs） | 尚未合并；本地长时间 Fuzz / 真实站点样本验证待执行；尚未接入 Quarantine Reader、ClamAV、Job Worker、数据库状态和 Manifest 持久化 |
 | M4 Job / Worker | 未实现 | — | SKIP LOCKED、Lease、Retry、Outbox、幂等消费 |
 | M5 Publisher | 未实现 | — | 不可变对象版本、Manifest 校验、原子指针切换、回滚 |
 | M6 Static Gateway | 未实现 | — | Host Mapping、每请求授权、路径规范化、响应安全头 |
@@ -99,3 +99,31 @@ CI 在 PostgreSQL 18 上运行：
 - M1 / M2 PostgreSQL 集成测试
 - `go test -race -count=1 ./...`
 
+
+
+## M3-A ZIP Validation Core（PR #4 Draft；CI 已通过；本地扩展验证待执行）
+
+当前分支：`feat/m3-zip-validation-core`。
+
+### 已实现范围
+- 新增 `internal/validator`，通过 `io.ReaderAt` 验证 ZIP 和 standalone HTML；不把用户路径写入服务器文件系统，也不执行解压落盘。
+- 在调用 `archive/zip.NewReader` 前检查 EOCD，限制中央目录大小和条目数；MVP 明确拒绝 ZIP64 与多卷 ZIP。
+- 仅接受 Store / Deflate；拒绝加密条目、符号链接、特殊文件和服务端执行 / 嵌套归档扩展名。
+- 校验 UTF-8 / NFC、绝对路径、盘符、反斜杠、点段、隐藏文件、控制字符、Windows 保留名、路径长度 / 深度。
+- 以 Unicode case-fold 后的路径键检测重复项、大小写冲突和文件 / 目录前缀冲突。
+- 检查单文件大小、总解压大小、压缩比、文件数、压缩数据区间重叠；读取每个文件到 EOF，触发 ZIP CRC 校验并计算 SHA-256。
+- 要求根目录存在精确小写 `index.html`；若所有文件均处于同一个顶层目录且不存在根 index，则剥离这一层目录。
+- ZIP 与单 HTML 均生成排序稳定的 Manifest v1；ZIP 条目同时保留发布路径和原始 archive source_path，包含大小、SHA-256、服务端 MIME、源大小和总解压大小。
+- 加入 ZIP Slip、Symlink、重复路径、大小写冲突、压缩炸弹、加密、ZIP64、CRC、缺少 index、单 HTML 大小 / 源长度 / 取消上下文测试；CI 另执行 10 秒 Fuzz smoke。
+
+### 当前不代表什么
+- M3-A 是纯验证核心，不会从 S3 读取对象，不会写数据库，不会触发异步任务。
+- 当前没有 ClamAV 集成；不能把结构验证通过解释为恶意软件扫描通过。
+- Manifest 不是发布授权；上传内容仍必须留在私有 Quarantine。
+- HTML / JavaScript 仍是用户控制的浏览器代码，必须使用独立 Artifact Origin。
+- 默认阈值是 MVP 起点，需用真实构建样本和受控压测校准。
+
+### M3-A 验收门槛
+- 已在 Go 1.27.4 + PostgreSQL 18.7 的 [CI run](https://github.com/1998x-stack/visual-platform/actions/runs/45223118153) 中通过 gofmt、go mod tidy 检查、go vet、go build、迁移重复执行、PostgreSQL 集成测试、`go test -race -count=1 ./...` 和 10 秒 Fuzz smoke（代码提交 `87182aa`，425,209 executions）。
+- 本地长时间 Fuzz、真实 Vite / 静态报告 ZIP 样本和资源峰值测量仍 NOT RUN；CI smoke 不等于完成长期 Fuzz。
+- PR 合并前由本地 Codex/Pi 在真实 Go 1.27.4 环境复核边界条件；任何未执行项目标记 NOT RUN。

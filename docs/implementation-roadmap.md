@@ -1,6 +1,6 @@
 # Visual Platform · Engineering Roadmap
 
-版本：v1.0 · 2026-11-23
+版本：v1.1 · 2026-11-24
 
 ## 产品交付目标
 
@@ -13,7 +13,7 @@
 | M0 工程骨架 | Go API / Worker / Gateway 入口、配置、日志、迁移、Compose | 可启动的工程骨架 | health / ready、DB、MinIO 连通；CI 通过 |
 | M1 领域与权限 | User、Workspace、Member、Artifact、ACL、Authorizer | 数据模型与权限服务 | 完成 Owner / Maintainer / Editor / Viewer 正反向矩阵 |
 | M2 上传隔离 | Upload Session、Workspace Quota、checksum、私有 Quarantine | 可恢复上传会话 | **已实现**：越权、配额、长度、checksum、lease 测试通过；M4 janitor 尚未实现 |
-| M3 ZIP Validator | 路径、symlink、重复条目、大小、压缩比、Manifest | 安全静态站点包 | ZIP Slip / Bomb / symlink 测试集通过 |
+| M3 ZIP Validator | M3-A ZIP / standalone HTML 纯验证核心；M3-B Quarantine Reader / Scanner；M3-C 状态与 Manifest 集成 | 无磁盘解压的结构验证、CRC / SHA-256、确定性 Manifest、扫描结果 | 攻击样本与 Fuzz；扫描不可用 Fail Closed；验证结果可审计；任何未通过内容不能发布 |
 | M4 Job / Worker | PostgreSQL Job、SKIP LOCKED、Lease、Retry、Outbox | 可恢复后台处理 | Worker kill/restart 后任务恢复；重复消费幂等 |
 | M5 Publisher | 不可变对象前缀、Manifest 校验、current_version_id | 原子发布和回滚 | 故障注入不破坏旧版本；回滚只切指针 |
 | M6 Static Gateway | Host Mapping、路径规范化、MIME、缓存、CSP | 安全静态访问 | 所有 GET / HEAD 请求授权；对象 Bucket 不公开 |
@@ -28,14 +28,16 @@
 2. PR-02：Workspace / Artifact / Version / ACL schema 与 repository。
 3. PR-03：统一 Authorizer、权限矩阵和负向测试。
 4. PR-04：Upload Session、Quarantine、配额、幂等键（已实现，见 M2）。
-5. PR-05：ZIP Validator、安全解压、Manifest、恶意样本（下一阶段 M3）。
-6. PR-06：Job Queue、Lease / Retry、Outbox、Worker。
-7. PR-07：不可变 Publisher、原子切换、回滚、孤儿对象清理。
-8. PR-08：Static Gateway、Host Mapping、路径规范化、响应头。
-9. PR-09：OIDC Broker、PKCE、Ticket Exchange、Host-only Cookie。
-10. PR-10：审计、指标、备份、恢复与安全验收。
-11. PR-11：OpenCode Web 发布入口与 CLI。
-12. PR-12：动态运行时独立方案与 PoC（不与静态 MVP 混合）。
+5. PR-05A：无磁盘解压的 ZIP Validation Core、Manifest 与攻击样本（当前 M3-A）。
+6. PR-05B：Worker 专用 Quarantine Reader、ClamAV Scanner Adapter 与扫描超时 / 递归 / 资源限制。
+7. PR-05C：Validation State、Manifest 持久化、审计与失败 / 重试语义。
+8. PR-06：Job Queue、Lease / Retry、Outbox、Worker，并将 M3-B/C 接入异步处理。
+9. PR-07：不可变 Publisher、原子切换、回滚、孤儿对象清理。
+10. PR-08：Static Gateway、Host Mapping、路径规范化、响应头。
+11. PR-09：OIDC Broker、PKCE、Ticket Exchange、Host-only Cookie。
+12. PR-10：审计、指标、备份、恢复与安全验收。
+13. PR-11：OpenCode Web 发布入口与 CLI。
+14. PR-12：动态运行时独立方案与 PoC（不与静态 MVP 混合）。
 
 ## P0 上线阻断项
 
@@ -69,3 +71,13 @@
 - 确定部门 Owner、离职资产移交、保留期和删除审批流程。
 - 确定安全扫描器、误报复核和违规内容处置流程。
 - 完成 PITR / MinIO 恢复演练和权限撤销演练。
+
+
+## M3-A 初始验证策略（2026-11-24）
+
+- ZIP 不执行文件系统解压；从有大小上限的随机访问源逐项读取并生成 Manifest。单 HTML 直接以有大小上限的 ReaderAt 计算 SHA-256 并生成相同 Manifest 结构。
+- 默认边界：ZIP 100 MiB、中央目录 8 MiB、条目 5,000、文件 4,000、单文件解压 64 MiB、总解压 512 MiB、压缩比 100、路径 1,024 bytes / 32 层。
+- MVP 拒绝 ZIP64、多卷 ZIP、加密条目、Symlink / 特殊文件、Store / Deflate 以外压缩方式、服务端执行扩展名和嵌套归档扩展名。
+- 根入口必须是精确小写 `index.html`；允许剥离唯一公共顶层目录。
+- Manifest 只描述内容，不表示内容可信、扫描通过或获得发布权限。
+- 真实阈值需通过常见 Vite / Next export / Python 静态报告等真实构建产物测试后再调整；不以未经测量的阈值承诺容量。
