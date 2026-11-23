@@ -23,10 +23,10 @@ type fakeUploadRepo struct {
 	rejected string
 }
 
-func (f *fakeUploadRepo) CreateUploadSession(_ context.Context, actorID, artifactID, name, kind string, size int64, checksum string) (domain.UploadSession, error) {
+func (f *fakeUploadRepo) CreateUploadSession(_ context.Context, actorID, artifactID, idempotencyKey, name, kind string, size int64, checksum string) (domain.UploadSession, error) {
 	f.session = domain.UploadSession{
 		ID: "00000000-0000-4000-8000-000000000099", WorkspaceID: "00000000-0000-4000-8000-000000000088",
-		ArtifactID: artifactID, CreatedBy: actorID, SourceName: name, SourceType: kind,
+		ArtifactID: artifactID, CreatedBy: actorID, IdempotencyKey: idempotencyKey, SourceName: name, SourceType: kind,
 		ExpectedSize: size, ExpectedSHA256: checksum, Status: "created",
 		ObjectKey: "quarantine/workspace/artifact/upload/source",
 		ExpiresAt: time.Now().Add(30 * time.Minute), CreatedAt: time.Now(),
@@ -123,6 +123,7 @@ func TestUploadSessionAndQuarantineStream(t *testing.T) {
 	create := httptest.NewRequest(http.MethodPost, "/api/v1/artifacts/"+artifactID+"/uploads", bytes.NewReader(createBody))
 	setDevIdentity(create)
 	create.Header.Set("Content-Type", "application/json")
+	create.Header.Set("Idempotency-Key", "upload-test-0001")
 	created := httptest.NewRecorder()
 	h.ServeHTTP(created, create)
 	if created.Code != http.StatusCreated {
@@ -157,6 +158,7 @@ func TestChecksumMismatchIsRejectedAndDeleted(t *testing.T) {
 	create := httptest.NewRequest(http.MethodPost, "/api/v1/artifacts/"+artifactID+"/uploads", bytes.NewReader(createBody))
 	setDevIdentity(create)
 	create.Header.Set("Content-Type", "application/json")
+	create.Header.Set("Idempotency-Key", "upload-test-0001")
 	created := httptest.NewRecorder()
 	h.ServeHTTP(created, create)
 	if created.Code != http.StatusCreated {
@@ -188,6 +190,7 @@ func TestUploadContentLengthMismatchDoesNotClaimSession(t *testing.T) {
 	create := httptest.NewRequest(http.MethodPost, "/api/v1/artifacts/"+artifactID+"/uploads", bytes.NewReader(createBody))
 	setDevIdentity(create)
 	create.Header.Set("Content-Type", "application/json")
+	create.Header.Set("Idempotency-Key", "upload-test-0001")
 	created := httptest.NewRecorder()
 	h.ServeHTTP(created, create)
 	if created.Code != http.StatusCreated {
