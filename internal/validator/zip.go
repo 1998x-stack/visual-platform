@@ -28,11 +28,11 @@ const (
 	defaultMaxFileBytes            uint64 = 64 << 20
 	defaultMaxTotalBytes           uint64 = 512 << 20
 	defaultMaxCompressionRatio     uint64 = 100
-	defaultMaxPathBytes                    = 1024
-	defaultMaxPathDepth                    = 32
-	maxEOCDCommentBytes                    = 1<<16 - 1
-	minEOCDSize                            = 22
-	eocdSignature                   uint32 = 0x06054b50
+	defaultMaxPathBytes                   = 1024
+	defaultMaxPathDepth                   = 32
+	maxEOCDCommentBytes                   = 1<<16 - 1
+	minEOCDSize                           = 22
+	eocdSignature                  uint32 = 0x06054b50
 )
 
 type ErrorCode string
@@ -55,11 +55,11 @@ const (
 	CodeFileTooLarge           ErrorCode = "file_too_large"
 	CodeTotalTooLarge          ErrorCode = "total_uncompressed_too_large"
 	CodeCompressionRatio       ErrorCode = "compression_ratio_exceeded"
-	CodeCorruptEntry            ErrorCode = "corrupt_entry"
-	CodeSizeMismatch            ErrorCode = "entry_size_mismatch"
-	CodeMissingIndex            ErrorCode = "missing_index_html"
-	CodeNoFiles                 ErrorCode = "archive_has_no_files"
-	CodeCanceled                ErrorCode = "validation_canceled"
+	CodeCorruptEntry           ErrorCode = "corrupt_entry"
+	CodeSizeMismatch           ErrorCode = "entry_size_mismatch"
+	CodeMissingIndex           ErrorCode = "missing_index_html"
+	CodeNoFiles                ErrorCode = "archive_has_no_files"
+	CodeCanceled               ErrorCode = "validation_canceled"
 )
 
 // ValidationError is a stable, non-sensitive error returned for rejected archives.
