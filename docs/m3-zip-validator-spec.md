@@ -36,7 +36,7 @@ The validator does not:
 - Change Upload Session state or persist the Manifest.
 - Claim that content is malware-free.
 
-The caller must spool the exact-key Quarantine object to a private temporary file or another bounded random-access source. A future Worker must use a dedicated read-only identity, create temporary files with mode 0600 on a dedicated no-exec volume, enforce a disk quota, remove the spool on every exit path, and enforce a job deadline and concurrency limit.
+The caller must spool the exact-key Quarantine object to a private temporary file or another bounded random-access source. A future Worker must use a dedicated identity with a custom MinIO policy scoped to the Quarantine object prefix and `s3:GetObject` only (no `s3:ListBucket`, `s3:PutObject`, or `s3:DeleteObject`). Application code must load the exact ObjectKey from the Upload Session and call a single-key reader; it must not list or discover objects. If per-job IAM isolation is required, use a short-lived STS session policy or a short-lived presigned GET where supported. The Worker must create temporary files with mode 0600 on a dedicated no-exec volume, enforce a disk quota, remove the spool on every exit path, and enforce a job deadline and concurrency limit.
 
 ## 3. Parse and validation sequence
 
@@ -129,7 +129,7 @@ M3-A only validates ZIP structure and content integrity. It does not detect all 
 
 M3-B must add:
 
-- A separate Worker-only Quarantine reader with exact-key read-only permissions.
+- A separate Worker-only Quarantine reader with prefix-scoped `s3:GetObject` permission only; application code reads one exact DB-provided key and has no listing / write / delete operation.
 - ClamAV (or an approved scanner) integration with explicit scan timeout, max file size, max total scan size, recursion, and file-count limits.
 - Configure scanner limits so oversized / skipped entries are reported (for ClamAV, review `AlertExceedsMax` / `--alert-exceeds-max` behavior); an incomplete scan must never be treated as clean.
 - Fail-closed behavior for scanner unavailable, timeout, unsupported archive, or incomplete scan.
@@ -167,3 +167,7 @@ Before M3-A is merged, run `gofmt`, `go mod tidy`, `go vet ./...`, `go build ./.
 - OWASP Path Traversal Prevention Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Path_Traversal_Prevention_Cheat_Sheet.html
 - Go 1.27.4 archive/zip: https://pkg.go.dev/archive/zip@go1.27.4
 - ClamAV clamd.conf reference (scan size, file size, recursion, file count and scan time): https://github.com/Cisco-Talos/clamav/blob/main/docs/man/clamd.conf.5.in
+
+
+- MinIO Policy-Based Access Control: https://docs.min.io/aistor/administration/iam/access/
+- AWS S3 IAM action and resource scoping: https://docs.aws.amazon.com/AmazonS3/latest/userguide/security_iam_service-with-iam.html
