@@ -5,11 +5,13 @@ package httpapi
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"path"
 	"mime"
 	"net"
 	"net/http"
@@ -21,6 +23,7 @@ import (
 	"github.com/1998x-stack/visual-platform/internal/permission"
 	"github.com/1998x-stack/visual-platform/internal/requestmeta"
 	"github.com/1998x-stack/visual-platform/internal/store/postgres"
+	"github.com/1998x-stack/visual-platform/internal/storage"
 )
 
 type Repository interface {
@@ -39,9 +42,21 @@ type Repository interface {
 	UpsertUserGrant(ctx context.Context, artifactID, actorID, targetID string, role domain.Role, expiry *time.Time) error
 }
 
+type UploadRepository interface {
+	CreateUploadSession(ctx context.Context, actorID, artifactID, sourceName, sourceType string, expectedSize int64, expectedSHA256 string) (domain.UploadSession, error)
+	GetUploadSession(ctx context.Context, id, actorID string) (domain.UploadSession, error)
+	ClaimUpload(ctx context.Context, id, actorID string) (domain.UploadSession, error)
+	ResetUploadClaim(ctx context.Context, id, actorID string) error
+	MarkUploadReceived(ctx context.Context, id, actorID string, actualSize int64, actualSHA256 string) error
+	MarkUploadRejected(ctx context.Context, id, actorID, reason string) error
+}
+
 type Server struct {
-	Repo    Repository
-	Logger  *slog.Logger
+	Repo Repository
+	Uploads UploadRepository
+	Quarantine storage.QuarantineStore
+	MaxUploadBytes int64
+	Logger *slog.Logger
 	DevAuth bool
 }
 
@@ -63,6 +78,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/artifacts/{id}", s.artifact)
 	mux.HandleFunc("GET /api/v1/artifacts/{id}/acl", s.acl)
 	mux.HandleFunc("PUT /api/v1/artifacts/{id}/acl", s.acl)
+	mux.HandleFunc("POST /api/v1/artifacts/{id}/uploads", s.createUpload)
+	mux.HandleFunc("GET /api/v1/uploads/{id}", s.uploadStatus)
+	mux.HandleFunc("PUT /api/v1/uploads/{id}/content", s.uploadContent)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var buf [16]byte
 		if _, err := rand.Read(buf[:]); err != nil {
@@ -411,6 +429,161 @@ func writeProblem(w http.ResponseWriter, r *http.Request, status int, code strin
 	id := requestmeta.ID(r.Context())
 	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "request_id": id}})
 }
+
+func (s *Server) uploadLimit() int64 {
+	if s.MaxUploadBytes > 0 { return s.MaxUploadBytes }
+	return 100 << 20
+}
+
+func validUploadName(name, sourceType string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" || len(name) > 255 || strings.ContainsAny(name, "/\\\\") {
+		return false
+	}
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f { return false }
+	}
+	ext := strings.ToLower(path.Ext(name))
+	switch sourceType {
+	case "html":
+		return ext == ".html" || ext == ".htm"
+	case "zip":
+		return ext == ".zip"
+	default:
+		return false
+	}
+}
+
+func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.principal(w, r)
+	if !ok { return }
+	if s.Uploads == nil || s.Quarantine == nil {
+		writeProblem(w, r, http.StatusServiceUnavailable, "UPLOAD_STORAGE_NOT_CONFIGURED")
+		return
+	}
+	artifactID := r.PathValue("id")
+	if !uuid.MatchString(artifactID) {
+		writeProblem(w, r, http.StatusNotFound, "NOT_FOUND")
+		return
+	}
+	var req struct {
+		SourceName string `json:"source_name"`
+		SourceType string `json:"source_type"`
+		ExpectedSize int64 `json:"expected_size"`
+		ExpectedSHA256 string `json:"expected_sha256"`
+	}
+	if !decodeJSON(w, r, &req) { return }
+	req.SourceName = strings.TrimSpace(req.SourceName)
+	req.ExpectedSHA256 = strings.ToLower(strings.TrimSpace(req.ExpectedSHA256))
+	if !validUploadName(req.SourceName, req.SourceType) ||
+		req.ExpectedSize <= 0 || req.ExpectedSize > s.uploadLimit() ||
+		len(req.ExpectedSHA256) != 64 {
+		writeProblem(w, r, http.StatusBadRequest, "INVALID_UPLOAD")
+		return
+	}
+	if _, err := hex.DecodeString(req.ExpectedSHA256); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "INVALID_UPLOAD")
+		return
+	}
+	session, err := s.Uploads.CreateUploadSession(r.Context(), p.UserID, artifactID,
+		req.SourceName, req.SourceType, req.ExpectedSize, req.ExpectedSHA256)
+	if err != nil { s.fail(w, r, err); return }
+	writeJSON(w, http.StatusCreated, session)
+}
+
+func (s *Server) uploadStatus(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.principal(w, r)
+	if !ok { return }
+	if s.Uploads == nil {
+		writeProblem(w, r, http.StatusServiceUnavailable, "UPLOAD_STORAGE_NOT_CONFIGURED")
+		return
+	}
+	id := r.PathValue("id")
+	if !uuid.MatchString(id) {
+		writeProblem(w, r, http.StatusNotFound, "NOT_FOUND")
+		return
+	}
+	session, err := s.Uploads.GetUploadSession(r.Context(), id, p.UserID)
+	if err != nil { s.fail(w, r, err); return }
+	writeJSON(w, http.StatusOK, session)
+}
+
+type countingReader struct {
+	reader io.Reader
+	n int64
+}
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.reader.Read(p)
+	c.n += int64(n)
+	return n, err
+}
+
+func (s *Server) uploadContent(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.principal(w, r)
+	if !ok { return }
+	if s.Uploads == nil || s.Quarantine == nil {
+		writeProblem(w, r, http.StatusServiceUnavailable, "UPLOAD_STORAGE_NOT_CONFIGURED")
+		return
+	}
+	id := r.PathValue("id")
+	if !uuid.MatchString(id) {
+		writeProblem(w, r, http.StatusNotFound, "NOT_FOUND")
+		return
+	}
+	session, err := s.Uploads.GetUploadSession(r.Context(), id, p.UserID)
+	if err != nil { s.fail(w, r, err); return }
+	if r.ContentLength < 0 {
+		writeProblem(w, r, http.StatusLengthRequired, "CONTENT_LENGTH_REQUIRED")
+		return
+	}
+	if r.ContentLength > s.uploadLimit() {
+		writeProblem(w, r, http.StatusRequestEntityTooLarge, "UPLOAD_TOO_LARGE")
+		return
+	}
+	if r.ContentLength != session.ExpectedSize {
+		writeProblem(w, r, http.StatusBadRequest, "CONTENT_LENGTH_MISMATCH")
+		return
+	}
+	claimed, err := s.Uploads.ClaimUpload(r.Context(), id, p.UserID)
+	if err != nil { s.fail(w, r, err); return }
+	r.Body = http.MaxBytesReader(w, r.Body, s.uploadLimit())
+	defer r.Body.Close()
+	hasher := sha256.New()
+	counter := &countingReader{reader: r.Body}
+	tee := io.TeeReader(counter, hasher)
+	if err := s.Quarantine.Put(r.Context(), claimed.ObjectKey, tee, claimed.ExpectedSize); err != nil {
+		if resetErr := s.Uploads.ResetUploadClaim(r.Context(), id, p.UserID); resetErr != nil {
+			s.logError("reset upload claim", resetErr)
+		}
+		s.logError("write quarantine object", err)
+		writeProblem(w, r, http.StatusServiceUnavailable, "QUARANTINE_WRITE_FAILED")
+		return
+	}
+	actualSHA := hex.EncodeToString(hasher.Sum(nil))
+	if counter.n != claimed.ExpectedSize || actualSHA != claimed.ExpectedSHA256 {
+		if err := s.Uploads.MarkUploadRejected(r.Context(), id, p.UserID, "checksum_mismatch"); err != nil {
+			s.logError("reject upload", err)
+			writeProblem(w, r, http.StatusInternalServerError, "UPLOAD_STATE_FAILED")
+			return
+		}
+		if err := s.Quarantine.Delete(r.Context(), claimed.ObjectKey); err != nil {
+			s.logError("delete rejected quarantine object", err)
+		}
+		writeProblem(w, r, http.StatusUnprocessableEntity, "CHECKSUM_MISMATCH")
+		return
+	}
+	if err := s.Uploads.MarkUploadReceived(r.Context(), id, p.UserID, counter.n, actualSHA); err != nil {
+		// Keep the object private in quarantine. A reconciliation worker must
+		// resolve uncertain DB commits; never delete a possibly committed object.
+		s.logError("finalize upload state", err)
+		writeProblem(w, r, http.StatusServiceUnavailable, "UPLOAD_FINALIZATION_PENDING")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"id": id, "status": "received", "size": counter.n, "sha256": actualSHA,
+	})
+}
+
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, postgres.ErrNotFound):
@@ -419,6 +592,8 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 		writeProblem(w, r, http.StatusNotFound, "NOT_FOUND")
 	case errors.Is(err, postgres.ErrConflict):
 		writeProblem(w, r, http.StatusConflict, "CONFLICT")
+	case errors.Is(err, postgres.ErrQuotaExceeded):
+		writeProblem(w, r, http.StatusRequestEntityTooLarge, "QUOTA_EXCEEDED")
 	default:
 		s.logError("database operation", err)
 		writeProblem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR")

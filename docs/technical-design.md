@@ -47,6 +47,18 @@ Cookie 使用 __Host- 前缀、Secure、HttpOnly、SameSite=Lax、Path=/，不�
 
 ZIP 必须拒绝绝对路径、盘符、反斜杠、NUL、越界段、symlink 和特殊文件；检测重复路径、大小写 / Unicode 规范化冲突；按实际解压流累计总字节；限制文件数、单文件大小、压缩比、目录深度、CPU、内存、磁盘和时限。MVP 不递归展开嵌套 ZIP。默认入口为根目录 index.html。MIME 由服务端 Manifest 生成。
 
+### 5.1 M2 已实现的上传接口
+
+- `POST /api/v1/artifacts/{artifact_id}/uploads` 创建 Upload Session，声明 source_name / source_type / expected_size / expected_sha256。
+- `PUT /api/v1/uploads/{upload_id}/content` 通过 Go API 流式写入 Quarantine；必须提供精确 Content-Length。
+- `GET /api/v1/uploads/{upload_id}` 查询状态。
+- 默认单文件上限 100 MiB；Workspace 默认 1 GiB、5 个活动会话；Session TTL 30 分钟，接收 Claim Lease 10 分钟。
+- API 使用 UUID 生成 object key；客户端文件名不参与路径构造；存储 Content-Type 固定为 application/octet-stream。
+- SHA-256 服务端重新计算，成功后原子更新 quota reserved / used 和 upload status。
+- M2 当前不解压 ZIP、不扫描、不创建 Manifest、不发布，也不暴露对象下载能力。
+
+MinIO Go SDK v7.4.1 接入单一预先创建的私有 Quarantine Bucket。启动时检查 Bucket 存在和 Bucket Policy 为空；不自动创建 Bucket。生产环境应为 API 提供仅作用于 Quarantine Bucket 的专用最小权限凭据。当前采用 API 代理上传，不返回预签名 URL。
+
 ## 6. 不可变版本与发布一致性
 
 对象键由服务端生成，版本使用独立前缀：

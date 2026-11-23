@@ -2,7 +2,10 @@ module github.com/1998x-stack/visual-platform
 
 go 1.27.0
 
-require github.com/jackc/pgx/v5 v5.13.0
+require (
+	github.com/jackc/pgx/v5 v5.13.0
+	github.com/minio/minio-go/v7 v7.4.1
+)
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect

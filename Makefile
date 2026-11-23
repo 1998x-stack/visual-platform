@@ -7,6 +7,7 @@ dev-db:
 
 migrate:
 	PGPASSWORD=visualdev psql -h 127.0.0.1 -U visual -d visual -v ON_ERROR_STOP=1 -f migrations/0001_initial.sql
+	PGPASSWORD=visualdev psql -h 127.0.0.1 -U visual -d visual -v ON_ERROR_STOP=1 -f migrations/0003_upload_quarantine.sql
 
 seed-dev:
 	PGPASSWORD=visualdev psql -h 127.0.0.1 -U visual -d visual -v ON_ERROR_STOP=1 -f migrations/0002_seed_demo.sql

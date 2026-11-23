@@ -92,33 +92,47 @@ npm run build:pdf
 
 > GitHub Pages 是公开静态托管，不是 Visual Platform 的企业私有内容运行环境。真实业务中的用户 Artifact 必须由私有部署的 Static Gateway 鉴权交付，不能直接放到 GitHub Pages。
 
-## 项目状态
+## 工程状态
 
-当前仓库用于沉淀产品方案、架构决策、接口契约、威胁模型、测试标准与可复现的设计文档构建流程。本文档不声称已有生产代码、企业 SSO、对象存储或访问控制已经部署。
+**M0 / M1 / M2 已有可编译 Go 代码和 PostgreSQL 集成测试；尚不是生产可用的文件托管服务。**
 
+- M0：Go API、健康检查、开发配置、CI。
+- M1：Workspace / Artifact / RBAC / ACL。
+- M2：Upload Session、Workspace Quota、流式上传、SHA-256 校验、私有 Quarantine 对象存储。
+- M3：ZIP 安全解包、路径 / Symlink / ZIP Bomb 防护、Manifest、内容扫描，尚未实现。
+- M4+：Job Worker、不可变发布、Static Gateway、企业 OIDC，尚未实现。
 
-## Go M0 + M1：基础工程（已提交开发代码，未具备生产部署条件）
+详细状态见 [implementation-status.md](docs/implementation-status.md)。
 
-**[实施状态与安全边界](docs/implementation-status.md)** · [Go CI](.github/workflows/go.yml)
+## 本地开发
 
-本次工程实现包括：Go API 主进程和 fail-closed Worker / Gateway 入口；PostgreSQL migration；Personal Workspace、成员角色、Artifact 元数据和用户 ACL；统一权限策略与跨租户负向测试；开发用 Compose、Makefile 和 JSON 结构化日志。
-
-正式 OIDC、MinIO 上传、ZIP 扫描、静态发布、域名网关和版本回滚 **均尚未实现**。开发身份模拟必须在 APP_ENV=development 且 API 仅监听 127.0.0.1 时显式开启，不得经反向代理暴露到企业网络或公网。
-
-本地启动（需要 Go 1.27.4、Docker Compose 和 psql）：
+需要 Go 1.27.4、Docker Compose、PostgreSQL 客户端。上传功能还需要一个**预先创建、无公开 Bucket Policy** 的 S3 / MinIO Quarantine Bucket。
 
 ```bash
 make dev-db
 make migrate
 make seed-dev
 go mod tidy
+cp .env.example .env
+# 编辑 .env 中的 S3 endpoint / bucket / 专用凭据
+set -a && source .env && set +a
 make api-dev
-# another terminal
-curl -H 'X-Dev-User-ID: 00000000-0000-4000-8000-000000000001' http://127.0.0.1:8071/api/v1/me
 ```
 
-运行测试：`make test`（需先启动并迁移本地 PostgreSQL）；CI 在 PostgreSQL Service 上运行 `go test -race ./...`。
+如暂时没有 S3 兼容存储，API 的 M0/M1 功能仍可启动；上传接口会返回 `503 UPLOAD_STORAGE_NOT_CONFIGURED`。
 
-### 开发安全要求
+## M2 上传接口
 
-不要把开发演示用户和开发密码用于生产；不要把示例版本当作已完成的企业级 Artifact Hosting。下一阶段必须先完善企业 SSO、文件隔离、资源配额和发布安全链路，再考虑真实公司内部上线。
+1. `POST /api/v1/artifacts/{artifact_id}/uploads`：创建上传会话，声明文件名、类型、大小和 SHA-256；服务端原子预留 Workspace 配额。
+2. `PUT /api/v1/uploads/{upload_id}/content`：经 API 流式写入私有 Quarantine Bucket，服务端重新计算 SHA-256。
+3. `GET /api/v1/uploads/{upload_id}`：查询上传状态。
+
+默认单文件上限 100 MiB；Workspace 默认容量 1 GiB、最多 5 个活动会话、会话 30 分钟过期。实际有效限制取 API `MAX_UPLOAD_BYTES` 与数据库 Workspace 配额中的较小值。
+
+M2 只接收 HTML / ZIP 声明类型，**不信任客户端 MIME，也不解压 ZIP、不扫描、不生成发布 Manifest、不提供下载或公开 URL**。上传成功状态 `received` 仅表示字节已写入隔离区且 SHA-256 一致，不表示内容安全或可发布。
+
+对象存储需配置 `S3_ENDPOINT`、`S3_ACCESS_KEY`、`S3_SECRET_KEY`、`S3_BUCKET`。Bucket 必须预先创建、保持私有且无显式 Bucket Policy；API 不会自动创建 Bucket，也不会生成预签名 URL。请给 API 配置仅限 Quarantine Bucket 的最小权限凭据。
+
+## GitHub Pages
+
+GitHub Pages 仅托管公开技术文档，不用于存储或发布企业员工 Artifact。真实用户内容只能由后续完成鉴权的私有 Static Gateway 提供。
