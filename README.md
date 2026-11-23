@@ -131,7 +131,7 @@ make api-dev
 
 M2 只接收 HTML / ZIP 声明类型，**不信任客户端 MIME，也不解压 ZIP、不扫描、不生成发布 Manifest、不提供下载或公开 URL**。上传成功状态 `received` 仅表示字节已写入隔离区且 SHA-256 一致，不表示内容安全或可发布。
 
-对象存储需配置 `S3_ENDPOINT`、`S3_ACCESS_KEY`、`S3_SECRET_KEY`、`S3_BUCKET`。Bucket 必须预先创建、保持私有且无显式 Bucket Policy；API 不会自动创建 Bucket，也不会生成预签名 URL。请给 API 配置仅限 Quarantine Bucket 的最小权限凭据。
+对象存储需配置 `S3_ENDPOINT`、`S3_ACCESS_KEY`、`S3_SECRET_KEY`、`S3_BUCKET`。Bucket 必须预先创建、保持私有且无显式 Bucket Policy；API 不会自动创建 Bucket，也不会生成预签名 URL。请给 API 配置仅限 Quarantine Bucket 的最小权限凭据。非 development 环境强制 S3_USE_SSL=true。
 
 ## GitHub Pages
 
