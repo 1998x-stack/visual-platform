@@ -18,9 +18,9 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/1998x-stack/visual-platform/internal/httpapi"
-	"github.com/1998x-stack/visual-platform/internal/store/postgres"
 	"github.com/1998x-stack/visual-platform/internal/storage"
 	minioStorage "github.com/1998x-stack/visual-platform/internal/storage/minio"
+	"github.com/1998x-stack/visual-platform/internal/store/postgres"
 )
 
 func main() {

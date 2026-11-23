@@ -11,10 +11,10 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"path"
 	"mime"
 	"net"
 	"net/http"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -22,8 +22,8 @@ import (
 	"github.com/1998x-stack/visual-platform/internal/domain"
 	"github.com/1998x-stack/visual-platform/internal/permission"
 	"github.com/1998x-stack/visual-platform/internal/requestmeta"
-	"github.com/1998x-stack/visual-platform/internal/store/postgres"
 	"github.com/1998x-stack/visual-platform/internal/storage"
+	"github.com/1998x-stack/visual-platform/internal/store/postgres"
 )
 
 type Repository interface {
@@ -52,12 +52,12 @@ type UploadRepository interface {
 }
 
 type Server struct {
-	Repo Repository
-	Uploads UploadRepository
-	Quarantine storage.QuarantineStore
+	Repo           Repository
+	Uploads        UploadRepository
+	Quarantine     storage.QuarantineStore
 	MaxUploadBytes int64
-	Logger *slog.Logger
-	DevAuth bool
+	Logger         *slog.Logger
+	DevAuth        bool
 }
 
 var uuid = regexp.MustCompile(`^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$`)
@@ -431,7 +431,9 @@ func writeProblem(w http.ResponseWriter, r *http.Request, status int, code strin
 }
 
 func (s *Server) uploadLimit() int64 {
-	if s.MaxUploadBytes > 0 { return s.MaxUploadBytes }
+	if s.MaxUploadBytes > 0 {
+		return s.MaxUploadBytes
+	}
 	return 100 << 20
 }
 
@@ -441,7 +443,9 @@ func validUploadName(name, sourceType string) bool {
 		return false
 	}
 	for _, r := range name {
-		if r < 0x20 || r == 0x7f { return false }
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
 	}
 	ext := strings.ToLower(path.Ext(name))
 	switch sourceType {
@@ -456,7 +460,9 @@ func validUploadName(name, sourceType string) bool {
 
 func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.principal(w, r)
-	if !ok { return }
+	if !ok {
+		return
+	}
 	if s.Uploads == nil || s.Quarantine == nil {
 		writeProblem(w, r, http.StatusServiceUnavailable, "UPLOAD_STORAGE_NOT_CONFIGURED")
 		return
@@ -467,12 +473,14 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		SourceName string `json:"source_name"`
-		SourceType string `json:"source_type"`
-		ExpectedSize int64 `json:"expected_size"`
+		SourceName     string `json:"source_name"`
+		SourceType     string `json:"source_type"`
+		ExpectedSize   int64  `json:"expected_size"`
 		ExpectedSHA256 string `json:"expected_sha256"`
 	}
-	if !decodeJSON(w, r, &req) { return }
+	if !decodeJSON(w, r, &req) {
+		return
+	}
 	req.SourceName = strings.TrimSpace(req.SourceName)
 	req.ExpectedSHA256 = strings.ToLower(strings.TrimSpace(req.ExpectedSHA256))
 	if !validUploadName(req.SourceName, req.SourceType) ||
@@ -487,13 +495,18 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	session, err := s.Uploads.CreateUploadSession(r.Context(), p.UserID, artifactID,
 		req.SourceName, req.SourceType, req.ExpectedSize, req.ExpectedSHA256)
-	if err != nil { s.fail(w, r, err); return }
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
 	writeJSON(w, http.StatusCreated, session)
 }
 
 func (s *Server) uploadStatus(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.principal(w, r)
-	if !ok { return }
+	if !ok {
+		return
+	}
 	if s.Uploads == nil {
 		writeProblem(w, r, http.StatusServiceUnavailable, "UPLOAD_STORAGE_NOT_CONFIGURED")
 		return
@@ -504,14 +517,18 @@ func (s *Server) uploadStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session, err := s.Uploads.GetUploadSession(r.Context(), id, p.UserID)
-	if err != nil { s.fail(w, r, err); return }
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, session)
 }
 
 type countingReader struct {
 	reader io.Reader
-	n int64
+	n      int64
 }
+
 func (c *countingReader) Read(p []byte) (int, error) {
 	n, err := c.reader.Read(p)
 	c.n += int64(n)
@@ -520,7 +537,9 @@ func (c *countingReader) Read(p []byte) (int, error) {
 
 func (s *Server) uploadContent(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.principal(w, r)
-	if !ok { return }
+	if !ok {
+		return
+	}
 	if s.Uploads == nil || s.Quarantine == nil {
 		writeProblem(w, r, http.StatusServiceUnavailable, "UPLOAD_STORAGE_NOT_CONFIGURED")
 		return
@@ -531,7 +550,10 @@ func (s *Server) uploadContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session, err := s.Uploads.GetUploadSession(r.Context(), id, p.UserID)
-	if err != nil { s.fail(w, r, err); return }
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
 	if r.ContentLength < 0 {
 		writeProblem(w, r, http.StatusLengthRequired, "CONTENT_LENGTH_REQUIRED")
 		return
@@ -545,7 +567,10 @@ func (s *Server) uploadContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	claimed, err := s.Uploads.ClaimUpload(r.Context(), id, p.UserID)
-	if err != nil { s.fail(w, r, err); return }
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, s.uploadLimit())
 	defer r.Body.Close()
 	hasher := sha256.New()

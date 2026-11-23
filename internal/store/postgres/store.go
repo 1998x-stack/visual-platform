@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/1998x-stack/visual-platform/internal/domain"
@@ -16,9 +16,9 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("resource not found")
-	ErrDenied   = errors.New("permission denied")
-	ErrConflict = errors.New("resource conflict")
+	ErrNotFound      = errors.New("resource not found")
+	ErrDenied        = errors.New("permission denied")
+	ErrConflict      = errors.New("resource conflict")
 	ErrQuotaExceeded = errors.New("upload quota exceeded")
 )
 
@@ -368,71 +368,89 @@ const uploadSelectColumns = `id::text,workspace_id::text,artifact_id::text,creat
 	COALESCE(actual_sha256,''),object_key,status,COALESCE(failure_code,''),expires_at,
 	received_at,created_at`
 
-type uploadScanner interface { Scan(dest ...any) error }
+type uploadScanner interface{ Scan(dest ...any) error }
 
 func scanUpload(row uploadScanner) (domain.UploadSession, error) {
 	var u domain.UploadSession
 	var received sql.NullTime
-	err := row.Scan(&u.ID,&u.WorkspaceID,&u.ArtifactID,&u.CreatedBy,
-		&u.SourceName,&u.SourceType,&u.ExpectedSize,&u.ExpectedSHA256,
-		&u.ActualSize,&u.ActualSHA256,&u.ObjectKey,&u.Status,&u.FailureCode,
-		&u.ExpiresAt,&received,&u.CreatedAt)
-	if received.Valid { u.ReceivedAt=&received.Time }
-	return u,err
+	err := row.Scan(&u.ID, &u.WorkspaceID, &u.ArtifactID, &u.CreatedBy,
+		&u.SourceName, &u.SourceType, &u.ExpectedSize, &u.ExpectedSHA256,
+		&u.ActualSize, &u.ActualSHA256, &u.ObjectKey, &u.Status, &u.FailureCode,
+		&u.ExpiresAt, &received, &u.CreatedAt)
+	if received.Valid {
+		u.ReceivedAt = &received.Time
+	}
+	return u, err
 }
 
-func validUploadInput(name,kind string,size int64,checksum string) bool {
-	name=strings.TrimSpace(name)
-	if name=="" || len(name)>255 || strings.ContainsAny(name,"/\\") ||
-		strings.IndexFunc(name,unicode.IsControl)>=0 || size<=0 {
+func validUploadInput(name, kind string, size int64, checksum string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" || len(name) > 255 || strings.ContainsAny(name, "/\\") ||
+		strings.IndexFunc(name, unicode.IsControl) >= 0 || size <= 0 {
 		return false
 	}
-	if kind!="html" && kind!="zip" { return false }
-	checksum=strings.ToLower(strings.TrimSpace(checksum))
-	if len(checksum)!=64 { return false }
-	_,err:=hex.DecodeString(checksum)
-	return err==nil
+	if kind != "html" && kind != "zip" {
+		return false
+	}
+	checksum = strings.ToLower(strings.TrimSpace(checksum))
+	if len(checksum) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(checksum)
+	return err == nil
 }
 
-func (s *Store) CreateUploadSession(ctx context.Context,actorID,artifactID,sourceName,sourceType string,expectedSize int64,expectedSHA256 string)(domain.UploadSession,error) {
+func (s *Store) CreateUploadSession(ctx context.Context, actorID, artifactID, sourceName, sourceType string, expectedSize int64, expectedSHA256 string) (domain.UploadSession, error) {
 	var result domain.UploadSession
-	if !validUploadInput(sourceName,sourceType,expectedSize,expectedSHA256) { return result,ErrConflict }
-	expectedSHA256=strings.ToLower(expectedSHA256)
-	tx,err:=s.DB.BeginTx(ctx,nil)
-	if err!=nil{return result,err}
+	if !validUploadInput(sourceName, sourceType, expectedSize, expectedSHA256) {
+		return result, ErrConflict
+	}
+	expectedSHA256 = strings.ToLower(expectedSHA256)
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return result, err
+	}
 	defer tx.Rollback()
 
-	var workspaceID,artifactStatus,workspaceStatus string
+	var workspaceID, artifactStatus, workspaceStatus string
 	var role domain.Role
 	// Lock order is Workspace Quota -> Artifact / Workspace / Membership -> Upload.
 	// Finalization and rejection use the same order to avoid quota/session deadlocks.
-	err=tx.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT a.workspace_id::text,a.status,w.status,m.role
 		 FROM artifacts a
 		 JOIN workspaces w ON w.id=a.workspace_id
 		 JOIN workspace_members m ON m.workspace_id=w.id
 		 JOIN users u ON u.id=m.user_id
 		 WHERE a.id=$1::uuid AND m.user_id=$2::uuid
-		   AND m.status='active' AND u.status='active'`,artifactID,actorID).
-		Scan(&workspaceID,&artifactStatus,&workspaceStatus,&role)
-	if errors.Is(err,sql.ErrNoRows){return result,ErrDenied}
-	if err!=nil{return result,err}
-	if workspaceStatus!="active" || artifactStatus!="draft" ||
-		(role!=domain.Owner && role!=domain.Maintainer && role!=domain.Editor) {
-		return result,ErrDenied
+		   AND m.status='active' AND u.status='active'`, artifactID, actorID).
+		Scan(&workspaceID, &artifactStatus, &workspaceStatus, &role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return result, ErrDenied
 	}
-	if _,err=tx.ExecContext(ctx,
-		`INSERT INTO workspace_quotas(workspace_id) VALUES($1::uuid) ON CONFLICT DO NOTHING`,workspaceID);err!=nil{return result,err}
+	if err != nil {
+		return result, err
+	}
+	if workspaceStatus != "active" || artifactStatus != "draft" ||
+		(role != domain.Owner && role != domain.Maintainer && role != domain.Editor) {
+		return result, ErrDenied
+	}
+	if _, err = tx.ExecContext(ctx,
+		`INSERT INTO workspace_quotas(workspace_id) VALUES($1::uuid) ON CONFLICT DO NOTHING`, workspaceID); err != nil {
+		return result, err
+	}
 	var quota domain.WorkspaceQuota
-	err=tx.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT workspace_id::text,max_bytes,used_bytes,reserved_bytes,
 		 max_single_upload_bytes,max_active_uploads
-		 FROM workspace_quotas WHERE workspace_id=$1::uuid FOR UPDATE`,workspaceID).
-		Scan(&quota.WorkspaceID,&quota.MaxBytes,&quota.UsedBytes,&quota.ReservedBytes,
-			&quota.MaxSingleUploadBytes,&quota.MaxActiveUploads)
-	if err!=nil{return result,err}
+		 FROM workspace_quotas WHERE workspace_id=$1::uuid FOR UPDATE`, workspaceID).
+		Scan(&quota.WorkspaceID, &quota.MaxBytes, &quota.UsedBytes, &quota.ReservedBytes,
+			&quota.MaxSingleUploadBytes, &quota.MaxActiveUploads)
+	if err != nil {
+		return result, err
+	}
 
-	err=tx.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT a.status,w.status,m.role
 		 FROM artifacts a
 		 JOIN workspaces w ON w.id=a.workspace_id
@@ -440,58 +458,82 @@ func (s *Store) CreateUploadSession(ctx context.Context,actorID,artifactID,sourc
 		 JOIN users u ON u.id=m.user_id
 		 WHERE a.id=$1::uuid AND a.workspace_id=$2::uuid
 		   AND m.user_id=$3::uuid AND m.status='active' AND u.status='active'
-		 FOR SHARE OF a,w,m,u`,artifactID,workspaceID,actorID).
-		Scan(&artifactStatus,&workspaceStatus,&role)
-	if errors.Is(err,sql.ErrNoRows){return result,ErrDenied}
-	if err!=nil{return result,err}
-	if workspaceStatus!="active" || artifactStatus!="draft" ||
-		(role!=domain.Owner && role!=domain.Maintainer && role!=domain.Editor) {
-		return result,ErrDenied
+		 FOR SHARE OF a,w,m,u`, artifactID, workspaceID, actorID).
+		Scan(&artifactStatus, &workspaceStatus, &role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return result, ErrDenied
+	}
+	if err != nil {
+		return result, err
+	}
+	if workspaceStatus != "active" || artifactStatus != "draft" ||
+		(role != domain.Owner && role != domain.Maintainer && role != domain.Editor) {
+		return result, ErrDenied
 	}
 
-	expiredRows,err:=tx.QueryContext(ctx,
+	expiredRows, err := tx.QueryContext(ctx,
 		`UPDATE upload_sessions SET status='expired',failure_code='session_expired',
 		 lease_until=NULL,updated_at=now()
 		 WHERE workspace_id=$1::uuid AND status IN('created','receiving') AND expires_at<=now()
-		 RETURNING expected_size`,workspaceID)
-	if err!=nil{return result,err}
-	var expiredBytes int64
-	for expiredRows.Next(){
-		var n int64
-		if err:=expiredRows.Scan(&n);err!=nil{expiredRows.Close();return result,err}
-		expiredBytes+=n
+		 RETURNING expected_size`, workspaceID)
+	if err != nil {
+		return result, err
 	}
-	if err:=expiredRows.Err();err!=nil{expiredRows.Close();return result,err}
+	var expiredBytes int64
+	for expiredRows.Next() {
+		var n int64
+		if err := expiredRows.Scan(&n); err != nil {
+			expiredRows.Close()
+			return result, err
+		}
+		expiredBytes += n
+	}
+	if err := expiredRows.Err(); err != nil {
+		expiredRows.Close()
+		return result, err
+	}
 	expiredRows.Close()
-	if expiredBytes>0 {
-		res,err:=tx.ExecContext(ctx,
+	if expiredBytes > 0 {
+		res, err := tx.ExecContext(ctx,
 			`UPDATE workspace_quotas SET reserved_bytes=reserved_bytes-$2,updated_at=now()
-			 WHERE workspace_id=$1::uuid AND reserved_bytes >= $2`,workspaceID,expiredBytes)
-		if err!=nil{return result,err}
-		n,_:=res.RowsAffected()
-		if n!=1{return result,ErrConflict}
-		quota.ReservedBytes-=expiredBytes
+			 WHERE workspace_id=$1::uuid AND reserved_bytes >= $2`, workspaceID, expiredBytes)
+		if err != nil {
+			return result, err
+		}
+		n, _ := res.RowsAffected()
+		if n != 1 {
+			return result, ErrConflict
+		}
+		quota.ReservedBytes -= expiredBytes
 	}
 	// A crashed receiver may be retried only after its short lease expires.
-	if _,err=tx.ExecContext(ctx,
+	if _, err = tx.ExecContext(ctx,
 		`UPDATE upload_sessions SET status='created',lease_until=NULL,updated_at=now()
 		 WHERE workspace_id=$1::uuid AND status='receiving'
-		   AND lease_until<=now() AND expires_at>now()`,workspaceID);err!=nil{return result,err}
+		   AND lease_until<=now() AND expires_at>now()`, workspaceID); err != nil {
+		return result, err
+	}
 
-	if expectedSize>quota.MaxSingleUploadBytes || quota.UsedBytes+quota.ReservedBytes+expectedSize>quota.MaxBytes {
-		return result,ErrQuotaExceeded
+	if expectedSize > quota.MaxSingleUploadBytes || quota.UsedBytes+quota.ReservedBytes+expectedSize > quota.MaxBytes {
+		return result, ErrQuotaExceeded
 	}
 	var active int
-	if err=tx.QueryRowContext(ctx,
+	if err = tx.QueryRowContext(ctx,
 		`SELECT count(*) FROM upload_sessions
 		 WHERE workspace_id=$1::uuid AND status IN('created','receiving') AND expires_at>now()`,
-		workspaceID).Scan(&active);err!=nil{return result,err}
-	if active>=quota.MaxActiveUploads{return result,ErrQuotaExceeded}
-	if _,err=tx.ExecContext(ctx,
+		workspaceID).Scan(&active); err != nil {
+		return result, err
+	}
+	if active >= quota.MaxActiveUploads {
+		return result, ErrQuotaExceeded
+	}
+	if _, err = tx.ExecContext(ctx,
 		`UPDATE workspace_quotas SET reserved_bytes=reserved_bytes+$2,updated_at=now()
-		 WHERE workspace_id=$1::uuid`,workspaceID,expectedSize);err!=nil{return result,err}
+		 WHERE workspace_id=$1::uuid`, workspaceID, expectedSize); err != nil {
+		return result, err
+	}
 
-	row:=tx.QueryRowContext(ctx,
+	row := tx.QueryRowContext(ctx,
 		`WITH new_id AS (SELECT gen_random_uuid() AS id)
 		 INSERT INTO upload_sessions(id,workspace_id,artifact_id,created_by,source_name,source_type,
 		   expected_size,expected_sha256,object_key,expires_at)
@@ -500,48 +542,62 @@ func (s *Store) CreateUploadSession(ctx context.Context,actorID,artifactID,sourc
 		   now()+interval '30 minutes'
 		 FROM new_id
 		 RETURNING `+uploadSelectColumns,
-		workspaceID,artifactID,actorID,strings.TrimSpace(sourceName),sourceType,expectedSize,expectedSHA256)
-	result,err=scanUpload(row)
-	if err!=nil{return result,writeError(err)}
-	if err=appendAudit(ctx,tx,actorID,"upload.session.create","upload",result.ID,
-		map[string]any{"artifact_id":artifactID,"source_type":sourceType,"expected_size":expectedSize});err!=nil{return result,err}
-	return result,tx.Commit()
+		workspaceID, artifactID, actorID, strings.TrimSpace(sourceName), sourceType, expectedSize, expectedSHA256)
+	result, err = scanUpload(row)
+	if err != nil {
+		return result, writeError(err)
+	}
+	if err = appendAudit(ctx, tx, actorID, "upload.session.create", "upload", result.ID,
+		map[string]any{"artifact_id": artifactID, "source_type": sourceType, "expected_size": expectedSize}); err != nil {
+		return result, err
+	}
+	return result, tx.Commit()
 }
 
-func (s *Store) GetUploadSession(ctx context.Context,id,actorID string)(domain.UploadSession,error) {
-	row:=s.DB.QueryRowContext(ctx,
-		`SELECT us.`+strings.ReplaceAll(uploadSelectColumns,",",",us.")+`
+func (s *Store) GetUploadSession(ctx context.Context, id, actorID string) (domain.UploadSession, error) {
+	row := s.DB.QueryRowContext(ctx,
+		`SELECT us.`+strings.ReplaceAll(uploadSelectColumns, ",", ",us.")+`
 		 FROM upload_sessions us
 		 JOIN workspace_members m ON m.workspace_id=us.workspace_id AND m.user_id=$2::uuid
 		 JOIN users u ON u.id=m.user_id
-		 WHERE us.id=$1::uuid AND m.status='active' AND u.status='active'`,id,actorID)
-	u,err:=scanUpload(row)
-	if errors.Is(err,sql.ErrNoRows){return u,ErrNotFound}
-	return u,err
+		 WHERE us.id=$1::uuid AND m.status='active' AND u.status='active'`, id, actorID)
+	u, err := scanUpload(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return u, ErrNotFound
+	}
+	return u, err
 }
 
-func (s *Store) ClaimUpload(ctx context.Context,id,actorID string)(domain.UploadSession,error) {
+func (s *Store) ClaimUpload(ctx context.Context, id, actorID string) (domain.UploadSession, error) {
 	var result domain.UploadSession
-	tx,err:=s.DB.BeginTx(ctx,nil)
-	if err!=nil{return result,err}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return result, err
+	}
 	defer tx.Rollback()
 	var workspaceID string
-	err=tx.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT workspace_id::text FROM upload_sessions
-		 WHERE id=$1::uuid AND created_by=$2::uuid`,id,actorID).Scan(&workspaceID)
-	if errors.Is(err,sql.ErrNoRows){return result,ErrNotFound}
-	if err!=nil{return result,err}
+		 WHERE id=$1::uuid AND created_by=$2::uuid`, id, actorID).Scan(&workspaceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return result, ErrNotFound
+	}
+	if err != nil {
+		return result, err
+	}
 	var quotaID string
-	err=tx.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT workspace_id::text FROM workspace_quotas
-		 WHERE workspace_id=$1::uuid FOR UPDATE`,workspaceID).Scan(&quotaID)
-	if err!=nil{return result,err}
+		 WHERE workspace_id=$1::uuid FOR UPDATE`, workspaceID).Scan(&quotaID)
+	if err != nil {
+		return result, err
+	}
 	var role domain.Role
 	var sessionStatus string
 	var leaseUntil sql.NullTime
 	var expiresAt time.Time
-	var artifactStatus,workspaceStatus string
-	err=tx.QueryRowContext(ctx,
+	var artifactStatus, workspaceStatus string
+	err = tx.QueryRowContext(ctx,
 		`SELECT us.status,us.lease_until,us.expires_at,a.status,w.status,m.role
 		 FROM upload_sessions us
 		 JOIN artifacts a ON a.id=us.artifact_id AND a.workspace_id=us.workspace_id
@@ -550,57 +606,81 @@ func (s *Store) ClaimUpload(ctx context.Context,id,actorID string)(domain.Upload
 		 JOIN users u ON u.id=us.created_by
 		 WHERE us.id=$1::uuid AND us.created_by=$2::uuid
 		   AND u.status='active' AND m.status='active'
-		 FOR UPDATE OF us,a,w,m,u`,id,actorID).
-		Scan(&sessionStatus,&leaseUntil,&expiresAt,&artifactStatus,&workspaceStatus,&role)
-	if errors.Is(err,sql.ErrNoRows){return result,ErrNotFound}
-	if err!=nil{return result,err}
-	if role!=domain.Owner&&role!=domain.Maintainer&&role!=domain.Editor{return result,ErrNotFound}
-	if artifactStatus!="draft" || workspaceStatus!="active" {return result,ErrNotFound}
-	if expiresAt.Before(time.Now()) || (sessionStatus!="created" && !(sessionStatus=="receiving" && leaseUntil.Valid && !leaseUntil.Time.After(time.Now()))) {
-		return result,ErrNotFound
+		 FOR UPDATE OF us,a,w,m,u`, id, actorID).
+		Scan(&sessionStatus, &leaseUntil, &expiresAt, &artifactStatus, &workspaceStatus, &role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return result, ErrNotFound
 	}
-	row:=tx.QueryRowContext(ctx,
+	if err != nil {
+		return result, err
+	}
+	if role != domain.Owner && role != domain.Maintainer && role != domain.Editor {
+		return result, ErrNotFound
+	}
+	if artifactStatus != "draft" || workspaceStatus != "active" {
+		return result, ErrNotFound
+	}
+	if expiresAt.Before(time.Now()) || (sessionStatus != "created" && !(sessionStatus == "receiving" && leaseUntil.Valid && !leaseUntil.Time.After(time.Now()))) {
+		return result, ErrNotFound
+	}
+	row := tx.QueryRowContext(ctx,
 		`UPDATE upload_sessions SET status='receiving',
 		 lease_until=now()+interval '10 minutes',updated_at=now()
 		 WHERE id=$1::uuid AND created_by=$2::uuid AND expires_at>now()
 		   AND (status='created' OR (status='receiving' AND lease_until<=now()))
-		 RETURNING `+uploadSelectColumns,id,actorID)
-	result,err=scanUpload(row)
-	if errors.Is(err,sql.ErrNoRows){return result,ErrNotFound}
-	if err!=nil{return result,err}
-	if err=appendAudit(ctx,tx,actorID,"upload.claim","upload",id,map[string]any{"lease_seconds":600});err!=nil{return result,err}
-	return result,tx.Commit()
+		 RETURNING `+uploadSelectColumns, id, actorID)
+	result, err = scanUpload(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return result, ErrNotFound
+	}
+	if err != nil {
+		return result, err
+	}
+	if err = appendAudit(ctx, tx, actorID, "upload.claim", "upload", id, map[string]any{"lease_seconds": 600}); err != nil {
+		return result, err
+	}
+	return result, tx.Commit()
 }
 
-func (s *Store) ResetUploadClaim(ctx context.Context,id,actorID string) error {
-	_,err:=s.DB.ExecContext(ctx,
+func (s *Store) ResetUploadClaim(ctx context.Context, id, actorID string) error {
+	_, err := s.DB.ExecContext(ctx,
 		`UPDATE upload_sessions SET status='created',lease_until=NULL,updated_at=now()
 		 WHERE id=$1::uuid AND created_by=$2::uuid AND status='receiving' AND expires_at>now()`,
-		id,actorID)
+		id, actorID)
 	return err
 }
 
-func (s *Store) MarkUploadReceived(ctx context.Context,id,actorID string,actualSize int64,actualSHA256 string) error {
-	if actualSize<=0 || len(actualSHA256)!=64 {return ErrConflict}
-	actualSHA256=strings.ToLower(actualSHA256)
-	tx,err:=s.DB.BeginTx(ctx,nil)
-	if err!=nil{return err}
+func (s *Store) MarkUploadReceived(ctx context.Context, id, actorID string, actualSize int64, actualSHA256 string) error {
+	if actualSize <= 0 || len(actualSHA256) != 64 {
+		return ErrConflict
+	}
+	actualSHA256 = strings.ToLower(actualSHA256)
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
 	defer tx.Rollback()
 	var workspaceID string
 	var expectedSize int64
 	var expectedSHA256 string
-	err=tx.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT workspace_id::text,expected_size,expected_sha256 FROM upload_sessions
-		 WHERE id=$1::uuid AND created_by=$2::uuid`,id,actorID).Scan(&workspaceID,&expectedSize,&expectedSHA256)
-	if errors.Is(err,sql.ErrNoRows){return ErrNotFound}
-	if err!=nil{return err}
+		 WHERE id=$1::uuid AND created_by=$2::uuid`, id, actorID).Scan(&workspaceID, &expectedSize, &expectedSHA256)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
 	var quotaID string
-	err=tx.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT workspace_id::text FROM workspace_quotas WHERE workspace_id=$1::uuid FOR UPDATE`,
 		workspaceID).Scan(&quotaID)
-	if err!=nil{return err}
-	var sessionID,artifactID string
-	err=tx.QueryRowContext(ctx,
+	if err != nil {
+		return err
+	}
+	var sessionID, artifactID string
+	err = tx.QueryRowContext(ctx,
 		`SELECT us.id::text,us.artifact_id::text
 		 FROM upload_sessions us
 		 JOIN artifacts a ON a.id=us.artifact_id AND a.workspace_id=us.workspace_id
@@ -612,57 +692,91 @@ func (s *Store) MarkUploadReceived(ctx context.Context,id,actorID string,actualS
 		   AND a.status='draft' AND w.status='active'
 		   AND m.status='active' AND m.role IN('owner','maintainer','editor')
 		   AND u.status='active'
-		 FOR UPDATE OF us,a,w,m,u`,id,actorID).Scan(&sessionID,&artifactID)
-	if errors.Is(err,sql.ErrNoRows){return ErrConflict}
-	if err!=nil{return err}
-	if actualSize!=expectedSize || actualSHA256!=expectedSHA256{return ErrConflict}
-	res,err:=tx.ExecContext(ctx,
+		 FOR UPDATE OF us,a,w,m,u`, id, actorID).Scan(&sessionID, &artifactID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrConflict
+	}
+	if err != nil {
+		return err
+	}
+	if actualSize != expectedSize || actualSHA256 != expectedSHA256 {
+		return ErrConflict
+	}
+	res, err := tx.ExecContext(ctx,
 		`UPDATE upload_sessions SET status='received',actual_size=$2,actual_sha256=$3,
 		 lease_until=NULL,received_at=now(),updated_at=now()
-		 WHERE id=$1::uuid AND status='receiving'`,id,actualSize,actualSHA256)
-	if err!=nil{return err}
-	n,_:=res.RowsAffected()
-	if n!=1{return ErrConflict}
-	res,err=tx.ExecContext(ctx,
+		 WHERE id=$1::uuid AND status='receiving'`, id, actualSize, actualSHA256)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n != 1 {
+		return ErrConflict
+	}
+	res, err = tx.ExecContext(ctx,
 		`UPDATE workspace_quotas SET reserved_bytes=reserved_bytes-$2,
 		 used_bytes=used_bytes+$2,updated_at=now()
-		 WHERE workspace_id=$1::uuid AND reserved_bytes >= $2`,workspaceID,expectedSize)
-	if err!=nil{return err}
-	n,_=res.RowsAffected()
-	if n!=1{return ErrConflict}
-	if err=appendAudit(ctx,tx,actorID,"upload.received","upload",sessionID,
-		map[string]any{"artifact_id":artifactID,"size":actualSize,"sha256":actualSHA256});err!=nil{return err}
+		 WHERE workspace_id=$1::uuid AND reserved_bytes >= $2`, workspaceID, expectedSize)
+	if err != nil {
+		return err
+	}
+	n, _ = res.RowsAffected()
+	if n != 1 {
+		return ErrConflict
+	}
+	if err = appendAudit(ctx, tx, actorID, "upload.received", "upload", sessionID,
+		map[string]any{"artifact_id": artifactID, "size": actualSize, "sha256": actualSHA256}); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
-func (s *Store) MarkUploadRejected(ctx context.Context,id,actorID,reason string) error {
-	tx,err:=s.DB.BeginTx(ctx,nil)
-	if err!=nil{return err}
+func (s *Store) MarkUploadRejected(ctx context.Context, id, actorID, reason string) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
 	defer tx.Rollback()
 	var workspaceID string
 	var expectedSize int64
-	err=tx.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT workspace_id::text,expected_size FROM upload_sessions
-		 WHERE id=$1::uuid AND created_by=$2::uuid`,id,actorID).Scan(&workspaceID,&expectedSize)
-	if errors.Is(err,sql.ErrNoRows){return ErrNotFound}
-	if err!=nil{return err}
+		 WHERE id=$1::uuid AND created_by=$2::uuid`, id, actorID).Scan(&workspaceID, &expectedSize)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
 	var quotaID string
-	err=tx.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT workspace_id::text FROM workspace_quotas WHERE workspace_id=$1::uuid FOR UPDATE`,
 		workspaceID).Scan(&quotaID)
-	if err!=nil{return err}
-	res,err:=tx.ExecContext(ctx,
+	if err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx,
 		`UPDATE upload_sessions SET status='rejected',failure_code=$3,lease_until=NULL,updated_at=now()
-		 WHERE id=$1::uuid AND created_by=$2::uuid AND status='receiving'`,id,actorID,reason)
-	if err!=nil{return err}
-	n,_:=res.RowsAffected()
-	if n!=1{return ErrConflict}
-	res,err=tx.ExecContext(ctx,
+		 WHERE id=$1::uuid AND created_by=$2::uuid AND status='receiving'`, id, actorID, reason)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n != 1 {
+		return ErrConflict
+	}
+	res, err = tx.ExecContext(ctx,
 		`UPDATE workspace_quotas SET reserved_bytes=reserved_bytes-$2,updated_at=now()
-		 WHERE workspace_id=$1::uuid AND reserved_bytes >= $2`,workspaceID,expectedSize)
-	if err!=nil{return err}
-	n,_=res.RowsAffected()
-	if n!=1{return ErrConflict}
-	if err=appendAudit(ctx,tx,actorID,"upload.rejected","upload",id,map[string]any{"failure_code":reason});err!=nil{return err}
+		 WHERE workspace_id=$1::uuid AND reserved_bytes >= $2`, workspaceID, expectedSize)
+	if err != nil {
+		return err
+	}
+	n, _ = res.RowsAffected()
+	if n != 1 {
+		return ErrConflict
+	}
+	if err = appendAudit(ctx, tx, actorID, "upload.rejected", "upload", id, map[string]any{"failure_code": reason}); err != nil {
+		return err
+	}
 	return tx.Commit()
 }

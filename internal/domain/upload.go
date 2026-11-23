@@ -27,7 +27,7 @@ type WorkspaceQuota struct {
 	WorkspaceID          string `json:"workspace_id"`
 	MaxBytes             int64  `json:"max_bytes"`
 	UsedBytes            int64  `json:"used_bytes"`
-	ReservedBytes         int64  `json:"reserved_bytes"`
+	ReservedBytes        int64  `json:"reserved_bytes"`
 	MaxSingleUploadBytes int64  `json:"max_single_upload_bytes"`
 	MaxActiveUploads     int    `json:"max_active_uploads"`
 }
