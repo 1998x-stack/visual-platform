@@ -46,8 +46,17 @@ jobs:
           go-version: "1.27.4"
       - name: Resolve dependencies
         run: go mod tidy
-      - name: Format source for testing
-        run: gofmt -w cmd internal
+      - name: Verify module files are committed
+        run: git diff --exit-code -- go.mod go.sum
+
+      - name: Verify Go formatting
+        run: |
+          unformatted="$(gofmt -l cmd internal)"
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            echo "Go sources must be formatted before merge."
+            exit 1
+          fi
       - name: Static analysis
         run: go vet ./...
       - name: Build every entrypoint
@@ -58,6 +67,11 @@ jobs:
         env:
           PGPASSWORD: visualtest
         run: psql -h 127.0.0.1 -U visual -d visual -v ON_ERROR_STOP=1 -f migrations/0001_initial.sql
+      - name: Verify migration is safe to reapply
+        env:
+          PGPASSWORD: visualtest
+        run: psql -h 127.0.0.1 -U visual -d visual -v ON_ERROR_STOP=1 -f migrations/0001_initial.sql
+
       - name: Unit and PostgreSQL integration tests
         env:
           DB_TEST_URL: postgres://visual:visualtest@127.0.0.1:5432/visual?sslmode=disable
