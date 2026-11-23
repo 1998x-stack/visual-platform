@@ -352,7 +352,7 @@ func ValidateZIP(ctx context.Context, source io.ReaderAt, archiveSize int64, lim
 }
 
 // ValidateHTML creates the same Manifest shape for a standalone HTML upload.
- // It hashes the exact source bytes and does not parse, sanitize, or execute HTML.
+// It hashes the exact source bytes and does not parse, sanitize, or execute HTML.
 func ValidateHTML(ctx context.Context, source io.ReaderAt, sourceSize, maxHTMLBytes int64) (Manifest, error) {
 	if ctx == nil {
 		ctx = context.Background()
