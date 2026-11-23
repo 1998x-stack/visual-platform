@@ -515,13 +515,14 @@ func validateEntryPath(raw string, isDirectory bool, limits Limits) (string, err
 	}
 	for _, segment := range segments {
 		if segment == "" || segment == "." || segment == ".." ||
+			len(segment) > 255 ||
 			strings.HasPrefix(segment, ".") ||
 			strings.HasSuffix(segment, ".") ||
 			strings.HasSuffix(segment, " ") {
 			return "", reject(CodeUnsafePath, raw, nil)
 		}
 		for _, character := range segment {
-			if unicode.IsControl(character) {
+			if unicode.IsControl(character) || unicode.Is(unicode.Cf, character) {
 				return "", reject(CodeUnsafePath, raw, nil)
 			}
 		}
@@ -544,7 +545,7 @@ func containsUnsafePathCharacter(name string) bool {
 }
 
 func isWindowsReservedName(segment string) bool {
-	base := strings.ToUpper(strings.SplitN(segment, ".", 2)[0])
+	base := strings.ToUpper(strings.TrimRight(strings.SplitN(segment, ".", 2)[0], " ."))
 	switch base {
 	case "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$":
 		return true
