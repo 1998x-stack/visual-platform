@@ -33,7 +33,7 @@ The validator does not:
 - Change Upload Session state or persist the Manifest.
 - Claim that content is malware-free.
 
-The caller must spool the exact-key Quarantine object to a private temporary file or another bounded random-access source. A future Worker must use a dedicated read-only identity and enforce a job deadline and concurrency limit.
+The caller must spool the exact-key Quarantine object to a private temporary file or another bounded random-access source. A future Worker must use a dedicated read-only identity, create temporary files with mode 0600 on a dedicated no-exec volume, enforce a disk quota, remove the spool on every exit path, and enforce a job deadline and concurrency limit.
 
 ## 3. Parse and validation sequence
 
