@@ -18,7 +18,7 @@ The next stage must inspect untrusted ZIP metadata and decompressed content with
 5. Enforce compressed archive, central directory, entry count, regular file count, per-file uncompressed bytes, aggregate uncompressed bytes, compression ratio, path byte length, and path depth limits.
 6. Read every accepted ZIP file to EOF so decompression and CRC checks run; compare actual bytes with declared sizes and generate a deterministic Manifest v1. For a standalone HTML file, enforce a separate 10 MiB default size limit and hash the exact source bytes into the same Manifest shape.
 7. Require root `index.html`, allowing exactly one common top-level wrapper directory to be stripped when every regular file is nested beneath it. Preserve the original ZIP `source_path` separately from the normalized publish `path` so a later Publisher can map bytes correctly.
-8. Keep M2 Upload API storage permissions unchanged. A future Worker must receive a separate exact-key read-only Quarantine identity.
+8. Keep M2 Upload API storage permissions unchanged. A future Worker must receive a separate Quarantine identity with custom prefix-scoped `s3:GetObject` only (no ListBucket / PutObject / DeleteObject); application code reads only the exact ObjectKey loaded from the Upload Session. Use short-lived STS session policy or presigned GET if per-job IAM isolation is required.
 9. Treat Manifest success as structural integrity only. It is not an antivirus verdict, browser-safety verdict, or publication authorization.
 
 ## Initial limits
