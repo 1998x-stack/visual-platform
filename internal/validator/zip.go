@@ -448,7 +448,7 @@ func validateEntryPath(raw string, isDirectory bool, limits Limits) (string, err
 	}
 	name := strings.TrimSuffix(raw, "/")
 	if name == "" || strings.HasPrefix(name, "/") || path.IsAbs(name) ||
-		strings.ContainsAny(name, "\ %?#:*"<>|") ||
+		containsUnsafePathCharacter(name) ||
 		!norm.NFC.IsNormalString(name) ||
 		!fs.ValidPath(name) ||
 		path.Clean(name) != name {
@@ -476,6 +476,17 @@ func validateEntryPath(raw string, isDirectory bool, limits Limits) (string, err
 		}
 	}
 	return name, nil
+}
+
+// containsUnsafePathCharacter rejects path delimiters that are ambiguous across URLs and filesystems.
+func containsUnsafePathCharacter(name string) bool {
+	for _, character := range name {
+		switch character {
+		case 0, '"', '#', '%', '*', ':', '<', '>', '?', '\\', '|':
+			return true
+		}
+	}
+	return false
 }
 
 func isWindowsReservedName(segment string) bool {
