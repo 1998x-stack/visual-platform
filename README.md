@@ -127,6 +127,8 @@ make api-dev
 2. `PUT /api/v1/uploads/{upload_id}/content`：经 API 流式写入私有 Quarantine Bucket，服务端重新计算 SHA-256。
 3. `GET /api/v1/uploads/{upload_id}`：查询上传状态。
 
+创建会话必须带 `Idempotency-Key` 请求头（8–128 个 ASCII 字母、数字、点、下划线、冒号或连字符）。同一 Workspace / 创建者使用相同 Key 和请求参数重试时返回原 Session，不重复预留配额；复用 Key 但参数不同则返回冲突。
+
 默认单文件上限 100 MiB；Workspace 默认容量 1 GiB、最多 5 个活动会话、会话 30 分钟过期。实际有效限制取 API `MAX_UPLOAD_BYTES` 与数据库 Workspace 配额中的较小值。
 
 M2 只接收 HTML / ZIP 声明类型，**不信任客户端 MIME，也不解压 ZIP、不扫描、不生成发布 Manifest、不提供下载或公开 URL**。上传成功状态 `received` 仅表示字节已写入隔离区且 SHA-256 一致，不表示内容安全或可发布。

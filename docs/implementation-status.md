@@ -37,6 +37,8 @@
 
 `POST /api/v1/artifacts/{artifact_id}/uploads`
 
+必需请求头：`Idempotency-Key: upload-request-0001`。同一 Workspace / 创建者范围内，同 Key 同参数重试返回原 Session；同 Key 不同参数返回冲突。
+
 ```json
 {
   "source_name": "dashboard.zip",

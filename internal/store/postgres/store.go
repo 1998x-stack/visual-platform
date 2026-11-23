@@ -582,6 +582,7 @@ func (s *Store) CreateUploadSession(ctx context.Context, actorID, artifactID, id
 	if err != nil {
 		return result, writeError(err)
 	}
+	result.IdempotencyKey = idempotencyKey
 	if err = appendAudit(ctx, tx, actorID, "upload.session.create", "upload", result.ID,
 		map[string]any{"artifact_id": artifactID, "source_type": sourceType, "expected_size": expectedSize}); err != nil {
 		return result, err

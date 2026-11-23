@@ -10,6 +10,7 @@ M1 已建立 Workspace / Artifact / ACL，但尚无二进制上传能力。直�
 ## 决策
 
 1. M2 引入 Upload Session 和 Workspace Quota，上传前声明大小和 SHA-256。
+2. 创建 Session 必须提供 Idempotency-Key；同 Workspace / 创建者下同 Key 同参数返回原 Session，参数不同返回冲突，避免客户端重试重复预留配额。
 2. Quota reservation 与 Session 创建在同一 PostgreSQL 事务内完成；使用 Workspace Quota 行锁防止并发超额预留。
 3. 文件内容由 API 代理流式写入单独的私有 Quarantine Bucket。M2 不返回预签名 URL，也不提供对象读取接口。
 4. 对象 Key 由服务端生成 UUID，不使用用户文件名；写入 Content-Type 固定为 application/octet-stream。
