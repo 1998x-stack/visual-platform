@@ -54,6 +54,7 @@ jobs:
           unformatted="$(gofmt -l cmd internal)"
           if [ -n "$unformatted" ]; then
             echo "$unformatted"
+            gofmt -d cmd internal
             echo "Go sources must be formatted before merge."
             exit 1
           fi
