@@ -46,7 +46,7 @@ The caller must spool the exact-key Quarantine object to a private temporary fil
 4. Reject ZIP64 and multi-disk archives in the MVP. The current product limits do not require ZIP64.
 5. Inspect every central-directory entry:
    - UTF-8 and NFC path requirements.
-   - No absolute path, drive letter, backslash, NUL, percent escape, query / fragment delimiter, Windows-invalid character, hidden segment, dot segment, trailing dot / space, or reserved Windows device name.
+   - No absolute path, drive letter, backslash, NUL, percent character, query / fragment delimiter, Windows-invalid character, hidden segment, dot segment, trailing dot / space, Unicode control / format character, or reserved Windows device name; each segment is limited to 255 bytes.
    - No symlink or special file.
    - No encrypted entry.
    - Only Store and Deflate compression.
@@ -82,7 +82,7 @@ These are initial guardrails, not capacity promises. Validate them against repre
 - Paths must be UTF-8 and already NFC-normalized. Non-NFC names are rejected rather than silently rewritten.
 - A Unicode case-folded path key is used for collision detection.
 - Hidden path segments are rejected in the MVP. This excludes `.env`, `.git`, `.htaccess`, and similar dotfiles.
-- Windows reserved device names and trailing dots / spaces are rejected for cross-platform determinism.
+- Windows reserved device names (including names with spaces before an extension), trailing dots / spaces, Unicode control / format characters, and segments longer than 255 bytes are rejected for cross-platform determinism.
 - Server-side executable extensions and nested archive extensions are rejected.
 - Common static extensions receive deterministic MIME values. Unknown extensions map to `application/octet-stream`.
 - HTML, JavaScript, CSS, SVG, and WebAssembly remain active browser content. They are allowed only because the eventual content host is isolated from the management Origin; this validator does not sanitize their behavior.
