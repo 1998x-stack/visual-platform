@@ -43,7 +43,7 @@ type Repository interface {
 }
 
 type UploadRepository interface {
-	CreateUploadSession(ctx context.Context, actorID, artifactID, sourceName, sourceType string, expectedSize int64, expectedSHA256 string) (domain.UploadSession, error)
+	CreateUploadSession(ctx context.Context, actorID, artifactID, idempotencyKey, sourceName, sourceType string, expectedSize int64, expectedSHA256 string) (domain.UploadSession, error)
 	GetUploadSession(ctx context.Context, id, actorID string) (domain.UploadSession, error)
 	ClaimUpload(ctx context.Context, id, actorID string) (domain.UploadSession, error)
 	ResetUploadClaim(ctx context.Context, id, actorID string) error
@@ -60,7 +60,70 @@ type Server struct {
 	DevAuth        bool
 }
 
-var uuid = regexp.MustCompile(`^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$`)
+var uuid = regexp.MustCompile(`^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}// Package httpapi exposes the M0/M1 HTTP surface. No production auth is
+// implemented: absent an enterprise IdP, all business endpoints fail closed.
+package httpapi
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
+	"mime"
+	"net"
+	"net/http"
+	"path"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/1998x-stack/visual-platform/internal/domain"
+	"github.com/1998x-stack/visual-platform/internal/permission"
+	"github.com/1998x-stack/visual-platform/internal/requestmeta"
+	"github.com/1998x-stack/visual-platform/internal/storage"
+	"github.com/1998x-stack/visual-platform/internal/store/postgres"
+)
+
+type Repository interface {
+	Ping(ctx context.Context) error
+	User(ctx context.Context, id string) (domain.User, error)
+	CreatePersonalWorkspace(ctx context.Context, userID, name string) (domain.Workspace, error)
+	ListWorkspaces(ctx context.Context, userID string) ([]domain.Workspace, error)
+	Workspace(ctx context.Context, id string) (domain.Workspace, error)
+	Role(ctx context.Context, workspaceID, userID string) (domain.Role, error)
+	Members(ctx context.Context, workspaceID string) ([]domain.Member, error)
+	AddMember(ctx context.Context, workspaceID, actorID, targetID string, role domain.Role) error
+	CreateArtifact(ctx context.Context, workspaceID, actorID, slug string) (domain.Artifact, error)
+	Artifact(ctx context.Context, id string) (domain.Artifact, error)
+	ListArtifacts(ctx context.Context, workspaceID string, includeDraft bool) ([]domain.Artifact, error)
+	Grants(ctx context.Context, artifactID string) ([]domain.Grant, error)
+	UpsertUserGrant(ctx context.Context, artifactID, actorID, targetID string, role domain.Role, expiry *time.Time) error
+}
+
+type UploadRepository interface {
+	CreateUploadSession(ctx context.Context, actorID, artifactID, idempotencyKey, sourceName, sourceType string, expectedSize int64, expectedSHA256 string) (domain.UploadSession, error)
+	GetUploadSession(ctx context.Context, id, actorID string) (domain.UploadSession, error)
+	ClaimUpload(ctx context.Context, id, actorID string) (domain.UploadSession, error)
+	ResetUploadClaim(ctx context.Context, id, actorID string) error
+	MarkUploadReceived(ctx context.Context, id, actorID string, actualSize int64, actualSHA256 string) error
+	MarkUploadRejected(ctx context.Context, id, actorID, reason string) error
+}
+
+type Server struct {
+	Repo           Repository
+	Uploads        UploadRepository
+	Quarantine     storage.QuarantineStore
+	MaxUploadBytes int64
+	Logger         *slog.Logger
+	DevAuth        bool
+}
+
+)
+var idempotencyKeyPattern = regexp.MustCompile("^[A-Za-z0-9._:-]{8,128}$")
 var slug = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 func (s *Server) Handler() http.Handler {
@@ -483,6 +546,11 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	req.SourceName = strings.TrimSpace(req.SourceName)
 	req.ExpectedSHA256 = strings.ToLower(strings.TrimSpace(req.ExpectedSHA256))
+	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if !idempotencyKeyPattern.MatchString(idempotencyKey) {
+		writeProblem(w, r, http.StatusBadRequest, "IDEMPOTENCY_KEY_REQUIRED")
+		return
+	}
 	if !validUploadName(req.SourceName, req.SourceType) ||
 		req.ExpectedSize <= 0 || len(req.ExpectedSHA256) != 64 {
 		writeProblem(w, r, http.StatusBadRequest, "INVALID_UPLOAD")
@@ -496,7 +564,7 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, http.StatusBadRequest, "INVALID_UPLOAD")
 		return
 	}
-	session, err := s.Uploads.CreateUploadSession(r.Context(), p.UserID, artifactID,
+	session, err := s.Uploads.CreateUploadSession(r.Context(), p.UserID, artifactID, idempotencyKey,
 		req.SourceName, req.SourceType, req.ExpectedSize, req.ExpectedSHA256)
 	if err != nil {
 		s.fail(w, r, err)
