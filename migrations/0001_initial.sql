@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS artifact_versions (
   UNIQUE(artifact_id,version_no),
   UNIQUE(artifact_id,id)
 );
-DO $
+DO $migration$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
@@ -69,7 +69,7 @@ BEGIN
       REFERENCES artifact_versions(artifact_id,id)
       DEFERRABLE INITIALLY IMMEDIATE;
   END IF;
-END $;
+END $migration$;
 
 CREATE TABLE IF NOT EXISTS artifact_acl (
   artifact_id UUID NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
