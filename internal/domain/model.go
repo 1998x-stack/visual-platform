@@ -47,6 +47,7 @@ const (
 	Editor     Role = "editor"
 	Viewer     Role = "viewer"
 )
+
 type Action string
 
 const (
@@ -59,6 +60,7 @@ const (
 	ArtifactTransfer       Action = "artifact.transfer"
 	ArtifactDelete         Action = "artifact.delete"
 )
+
 type Decision struct {
 	Allowed bool   `json:"allowed"`
 	Reason  string `json:"reason"`

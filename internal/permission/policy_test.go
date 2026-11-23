@@ -51,10 +51,10 @@ func TestACLSubjectExpirationAndScope(t *testing.T) {
 	p := domain.Principal{UserID: "alice", Active: true, Groups: []string{"project:42"}}
 	past, future := now.Add(-time.Minute), now.Add(time.Minute)
 	tests := []struct {
-		name string
-		grant domain.Grant
+		name   string
+		grant  domain.Grant
 		action domain.Action
-		want bool
+		want   bool
 	}{
 		{"direct user read", domain.Grant{SubjectType: "user", SubjectID: "alice", Role: domain.Viewer}, domain.ArtifactRead, true},
 		{"direct user cannot publish as viewer", domain.Grant{SubjectType: "user", SubjectID: "alice", Role: domain.Viewer}, domain.ArtifactPublish, false},
