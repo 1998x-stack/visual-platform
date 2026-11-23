@@ -19,6 +19,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    outputs:
+      pages_enabled: ${{ steps.pages_setup.outcome == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,16 +58,23 @@ jobs:
           fi
 
       - name: Configure Pages
+        id: pages_setup
         uses: actions/configure-pages@v5
+        continue-on-error: true
+
+      - name: Explain Pages setup requirement
+        if: steps.pages_setup.outcome != 'success'
+        run: echo "::warning::PDF and HTML are committed. Enable Settings > Pages > Source = GitHub Actions to activate the public site."
 
       - name: Upload Pages artifact
+        if: steps.pages_setup.outcome == 'success'
         uses: actions/upload-pages-artifact@v4
         with:
           path: docs
 
   deploy:
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && needs.build.outputs.pages_enabled == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
