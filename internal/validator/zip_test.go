@@ -134,6 +134,9 @@ func TestValidateZIPRejectsUnsafePaths(t *testing.T) {
 		{name: "query delimiter", path: "assets/app.js?x=1"},
 		{name: "trailing dot", path: "assets/app.js."},
 		{name: "trailing space", path: "assets/app.js "},
+		{name: "reserved name with space", path: "CON .txt"},
+		{name: "oversized path segment", path: "assets/" + strings.Repeat("a", 256) + ".js"},
+		{name: "unicode format control", path: "assets/name\u202e.js"},
 		{name: "non NFC unicode", path: "assets/cafe\u0301.js"},
 		{name: "null byte", path: "assets/bad\x00name.js"},
 	}
