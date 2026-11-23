@@ -1,0 +1,78 @@
+name: Go M0-M1 quality gates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "go.mod"
+      - "go.sum"
+      - "**/*.go"
+      - "migrations/**"
+      - "deploy/**"
+      - ".github/workflows/go.yml"
+  pull_request:
+    paths:
+      - "go.mod"
+      - "go.sum"
+      - "**/*.go"
+      - "migrations/**"
+      - "deploy/**"
+      - ".github/workflows/go.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  go-test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: visual
+          POSTGRES_PASSWORD: visualtest
+          POSTGRES_DB: visual
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U visual -d visual"
+          --health-interval 5s --health-timeout 3s --health-retries 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.4"
+      - name: Resolve dependencies
+        run: go mod tidy
+      - name: Verify module files are committed
+        run: git diff --exit-code -- go.mod go.sum
+
+      - name: Verify Go formatting
+        run: |
+          unformatted="$(gofmt -l cmd internal)"
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            echo "Go sources must be formatted before merge."
+            exit 1
+          fi
+      - name: Static analysis
+        run: go vet ./...
+      - name: Build every entrypoint
+        run: go build ./...
+      - name: Install postgres client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Apply initial migration
+        env:
+          PGPASSWORD: visualtest
+        run: psql -h 127.0.0.1 -U visual -d visual -v ON_ERROR_STOP=1 -f migrations/0001_initial.sql
+      - name: Verify migration is safe to reapply
+        env:
+          PGPASSWORD: visualtest
+        run: psql -h 127.0.0.1 -U visual -d visual -v ON_ERROR_STOP=1 -f migrations/0001_initial.sql
+
+      - name: Unit and PostgreSQL integration tests
+        env:
+          DB_TEST_URL: postgres://visual:visualtest@127.0.0.1:5432/visual?sslmode=disable
+        run: go test -race -count=1 ./...

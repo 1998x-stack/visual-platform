@@ -79,7 +79,7 @@ Artifact Browser --> Ingress --> Go Static Gateway
 需要 Node.js 22+。
 
 ```bash
-npm ci
+npm install
 npm run check
 npm run build:pdf
 ```
@@ -95,3 +95,30 @@ npm run build:pdf
 ## 项目状态
 
 当前仓库用于沉淀产品方案、架构决策、接口契约、威胁模型、测试标准与可复现的设计文档构建流程。本文档不声称已有生产代码、企业 SSO、对象存储或访问控制已经部署。
+
+
+## Go M0 + M1：基础工程（已提交开发代码，未具备生产部署条件）
+
+**[实施状态与安全边界](docs/implementation-status.md)** · [Go CI](.github/workflows/go.yml)
+
+本次工程实现包括：Go API 主进程和 fail-closed Worker / Gateway 入口；PostgreSQL migration；Personal Workspace、成员角色、Artifact 元数据和用户 ACL；统一权限策略与跨租户负向测试；开发用 Compose、Makefile 和 JSON 结构化日志。
+
+正式 OIDC、MinIO 上传、ZIP 扫描、静态发布、域名网关和版本回滚 **均尚未实现**。开发身份模拟必须在 APP_ENV=development 且 API 仅监听 127.0.0.1 时显式开启，不得经反向代理暴露到企业网络或公网。
+
+本地启动（需要 Go 1.27.4、Docker Compose 和 psql）：
+
+```bash
+make dev-db
+make migrate
+make seed-dev
+go mod tidy
+make api-dev
+# another terminal
+curl -H 'X-Dev-User-ID: 00000000-0000-4000-8000-000000000001' http://127.0.0.1:8071/api/v1/me
+```
+
+运行测试：`make test`（需先启动并迁移本地 PostgreSQL）；CI 在 PostgreSQL Service 上运行 `go test -race ./...`。
+
+### 开发安全要求
+
+不要把开发演示用户和开发密码用于生产；不要把示例版本当作已完成的企业级 Artifact Hosting。下一阶段必须先完善企业 SSO、文件隔离、资源配额和发布安全链路，再考虑真实公司内部上线。

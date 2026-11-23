@@ -1,0 +1,21 @@
+# PostgreSQL only. The Go API itself runs on 127.0.0.1 with explicit dev auth.
+# Never expose this demo identity mechanism through an ingress or reverse proxy.
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: visual
+      POSTGRES_USER: visual
+      POSTGRES_PASSWORD: visualdev
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U visual -d visual"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  pgdata:
