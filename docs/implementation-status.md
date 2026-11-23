@@ -9,7 +9,7 @@
 | M0 工程骨架 | 已实现 | Go API、结构化日志、健康 / 就绪检查、开发配置、CI | Worker / Gateway 仍为显式失败的 Stub |
 | M1 领域与权限 | 已实现 | Workspace、成员角色、Artifact 元数据、ACL、Authorizer、审计 | 企业 OIDC / 组织目录未实现 |
 | M2 上传隔离 | 已实现（开发基线） | Upload Session、配额预留、流式 Quarantine 写入、SHA-256、会话租约、重试、状态审计 | 生产级 MinIO 部署、生命周期清理 Worker、断点续传、多段上传未实现 |
-| M3 ZIP Validator | 进行中（PR #4；CI 通过） | ZIP / standalone HTML Validation Core、无磁盘解压、中央目录预检、路径 / 类型 / 大小 / 压缩比 / 数据重叠检查、CRC / SHA-256、确定性 Manifest、攻击样本与 10 秒 Fuzz smoke | 尚未合并；本地长时间 Fuzz / 真实站点样本验证待执行；尚未接入 Quarantine Reader、ClamAV、Job Worker、数据库状态和 Manifest 持久化 |
+| M3 ZIP Validator | 进行中（PR #4；CI 通过） | ZIP / standalone HTML Validation Core、无磁盘解压、中央目录预检、路径 / 类型 / 大小 / 压缩比 / 数据重叠检查、CRC / SHA-256、确定性 Manifest、攻击样本与 10 秒 Fuzz smoke（最新代码 revision 425,209 execs） | 尚未合并；本地长时间 Fuzz / 真实站点样本验证待执行；尚未接入 Quarantine Reader、ClamAV、Job Worker、数据库状态和 Manifest 持久化 |
 | M4 Job / Worker | 未实现 | — | SKIP LOCKED、Lease、Retry、Outbox、幂等消费 |
 | M5 Publisher | 未实现 | — | 不可变对象版本、Manifest 校验、原子指针切换、回滚 |
 | M6 Static Gateway | 未实现 | — | Host Mapping、每请求授权、路径规范化、响应安全头 |
@@ -124,6 +124,6 @@ CI 在 PostgreSQL 18 上运行：
 - 默认阈值是 MVP 起点，需用真实构建样本和受控压测校准。
 
 ### M3-A 验收门槛
-- 已在 Go 1.27.4 + PostgreSQL 18.7 的 CI 中通过 gofmt、go mod tidy 检查、go vet、go build、迁移重复执行、PostgreSQL 集成测试、`go test -race -count=1 ./...` 和 10 秒 Fuzz smoke（代码提交 `87182aa`）。
+- 已在 Go 1.27.4 + PostgreSQL 18.7 的 [CI run](https://github.com/1998x-stack/visual-platform/actions/runs/45223118153) 中通过 gofmt、go mod tidy 检查、go vet、go build、迁移重复执行、PostgreSQL 集成测试、`go test -race -count=1 ./...` 和 10 秒 Fuzz smoke（代码提交 `87182aa`，425,209 executions）。
 - 本地长时间 Fuzz、真实 Vite / 静态报告 ZIP 样本和资源峰值测量仍 NOT RUN；CI smoke 不等于完成长期 Fuzz。
 - PR 合并前由本地 Codex/Pi 在真实 Go 1.27.4 环境复核边界条件；任何未执行项目标记 NOT RUN。
