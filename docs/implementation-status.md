@@ -66,7 +66,7 @@ API 只有在以下四个变量全部设置时才启用上传：
 - `S3_SECRET_KEY`
 - `S3_BUCKET`：预先创建的私有隔离 Bucket
 
-可选：`S3_REGION`、`S3_USE_SSL`、`MAX_UPLOAD_BYTES`。默认上传上限 100 MiB。数据库 Workspace Quota 仍然是额外约束；提高 API 上限并不会自动提高 Workspace 的 max_single_upload_bytes。
+可选：`S3_REGION`、`S3_USE_SSL`、`MAX_UPLOAD_BYTES`。默认上传上限 100 MiB；非 development 环境强制 S3_USE_SSL=true。数据库 Workspace Quota 仍然是额外约束；提高 API 上限并不会自动提高 Workspace 的 max_single_upload_bytes。
 
 对象存储 SDK：MinIO Go SDK v7.4.1（Apache-2.0）。启动时检查 Bucket 存在，并拒绝带有显式 Bucket Policy 的隔离 Bucket。API 不自动创建 Bucket。
 
