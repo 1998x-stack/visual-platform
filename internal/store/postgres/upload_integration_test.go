@@ -159,3 +159,30 @@ func TestM2UploadQuotaIsolationAndStateTransitions(t *testing.T) {
 		t.Fatalf("replacement status=%s", replacement.Status)
 	}
 }
+
+func TestValidUploadInput(t *testing.T) {
+	checksum := strings.Repeat("a", 64)
+	cases := []struct {
+		name, kind, digest string
+		size int64
+		want bool
+	}{
+		{"site.html", "html", checksum, 10, true},
+		{"site.htm", "html", checksum, 10, true},
+		{"site.zip", "zip", checksum, 10, true},
+		{"site.php", "html", checksum, 10, false},
+		{"site.html.zip", "html", checksum, 10, false},
+		{"../site.html", "html", checksum, 10, false},
+		{ "C:\\temp\\site.zip", "zip", checksum, 10, false},
+		{"site.zip", "zip", strings.ToUpper(checksum), 10, true},
+		{"site.zip", "zip", checksum, 0, false},
+		{"site.zip", "zip", "not-a-sha", 10, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name+"-"+tc.kind, func(t *testing.T) {
+			if got := validUploadInput(tc.name, tc.kind, tc.size, tc.digest); got != tc.want {
+				t.Fatalf("got %v want %v", got, tc.want)
+			}
+		})
+	}
+}
