@@ -158,7 +158,7 @@ Automated tests cover:
 - CRC / decompression failure and actual-vs-declared size mismatch.
 - Canceled context and malformed input fuzz seeds.
 
-Before M3-A is merged, run `gofmt`, `go mod tidy`, `go vet ./...`, `go build ./...`, and `go test -race -count=1 ./...` on Go 1.27.4 with PostgreSQL 18. Run an extended local fuzz campaign separately and record it; CI seed execution is not a substitute.
+Before M3-A is merged, run `gofmt`, `go mod tidy`, `go vet ./...`, `go build ./...`, and `go test -race -count=1 ./...` on Go 1.27.4 with PostgreSQL 18. CI also runs a 10-second ZIP-validator fuzz smoke test. Run an extended local fuzz campaign separately and record duration / coverage / corpus; the CI smoke test is not a substitute.
 
 
 ## 10. References
