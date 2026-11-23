@@ -35,7 +35,7 @@ func (s *Store) CreatePersonalWorkspace(ctx context.Context, userID, name string
 	defer tx.Rollback()
 	err = tx.QueryRowContext(ctx,
 		`INSERT INTO workspaces (kind, name, owner_ref, created_by)
-		 VALUES ('personal',$1,$2,$2::uuid)
+		 VALUES ('personal',$1,($2::uuid)::text,$2::uuid)
 		 RETURNING id::text,kind,name,owner_ref,created_by::text,status`,
 		name, userID).Scan(&w.ID,&w.Kind,&w.Name,&w.OwnerRef,&w.CreatedBy,&w.Status)
 	if err != nil { return w, writeError(err) }
