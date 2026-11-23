@@ -1,0 +1,41 @@
+name: Normalize Go source and lockfile (temporary feature-branch task)
+
+on:
+  push:
+    branches: [feat/m0-m1-foundation]
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/m0-m1-foundation
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.4"
+          cache: false
+
+      - name: Lock Go modules
+        run: go mod tidy
+
+      - name: Format Go source
+        run: gofmt -w cmd internal
+
+      - name: Commit generated formatting and checksums
+        run: |
+          git add go.mod go.sum cmd internal
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "chore(go): format sources and commit module checksums"
+            git push origin HEAD:feat/m0-m1-foundation
+          fi
