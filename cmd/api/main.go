@@ -69,9 +69,17 @@ func main() {
 			log.Error("S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY and S3_BUCKET must be configured together")
 			os.Exit(2)
 		}
-		secure, parseErr := strconv.ParseBool(getenv("S3_USE_SSL", "false"))
+		defaultSSL := "true"
+		if os.Getenv("APP_ENV") == "development" {
+			defaultSSL = "false"
+		}
+		secure, parseErr := strconv.ParseBool(getenv("S3_USE_SSL", defaultSSL))
 		if parseErr != nil {
 			log.Error("invalid S3_USE_SSL", "error", parseErr)
+			os.Exit(2)
+		}
+		if os.Getenv("APP_ENV") != "development" && !secure {
+			log.Error("S3_USE_SSL=false is allowed only in development")
 			os.Exit(2)
 		}
 		storageCtx, storageCancel := context.WithTimeout(context.Background(), 8*time.Second)
