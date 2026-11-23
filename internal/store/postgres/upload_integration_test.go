@@ -173,8 +173,8 @@ func TestValidUploadInput(t *testing.T) {
 	checksum := strings.Repeat("a", 64)
 	cases := []struct {
 		name, kind, digest string
-		size int64
-		want bool
+		size               int64
+		want               bool
 	}{
 		{"site.html", "html", checksum, 10, true},
 		{"site.htm", "html", checksum, 10, true},
@@ -182,7 +182,7 @@ func TestValidUploadInput(t *testing.T) {
 		{"site.php", "html", checksum, 10, false},
 		{"site.html.zip", "html", checksum, 10, false},
 		{"../site.html", "html", checksum, 10, false},
-		{ "C:\\temp\\site.zip", "zip", checksum, 10, false},
+		{"C:\\temp\\site.zip", "zip", checksum, 10, false},
 		{"site.zip", "zip", strings.ToUpper(checksum), 10, true},
 		{"site.zip", "zip", checksum, 0, false},
 		{"site.zip", "zip", "not-a-sha", 10, false},
@@ -197,13 +197,16 @@ func TestValidUploadInput(t *testing.T) {
 }
 
 func TestValidIdempotencyKey(t *testing.T) {
-	for _, tc := range []struct{ key string; want bool }{
-		{"request-0001",true},{"upload.v1:request_1",true},
-		{"short",false},{"has space-0001",false},{"slash/key-0001",false},
-		{strings.Repeat("a",129),false},
+	for _, tc := range []struct {
+		key  string
+		want bool
+	}{
+		{"request-0001", true}, {"upload.v1:request_1", true},
+		{"short", false}, {"has space-0001", false}, {"slash/key-0001", false},
+		{strings.Repeat("a", 129), false},
 	} {
-		if got:=validIdempotencyKey(tc.key);got!=tc.want {
-			t.Errorf("validIdempotencyKey(%q)=%v want %v",tc.key,got,tc.want)
+		if got := validIdempotencyKey(tc.key); got != tc.want {
+			t.Errorf("validIdempotencyKey(%q)=%v want %v", tc.key, got, tc.want)
 		}
 	}
 }

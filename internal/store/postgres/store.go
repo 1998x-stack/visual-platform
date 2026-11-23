@@ -410,7 +410,9 @@ func validUploadInput(name, kind string, size int64, checksum string) bool {
 }
 
 func validIdempotencyKey(key string) bool {
-	if len(key) < 8 || len(key) > 128 { return false }
+	if len(key) < 8 || len(key) > 128 {
+		return false
+	}
 	for _, r := range key {
 		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
 			(r >= '0' && r <= '9') || strings.ContainsRune("._:-", r)) {
@@ -547,7 +549,9 @@ func (s *Store) CreateUploadSession(ctx context.Context, actorID, artifactID, id
 		}
 		return existing, tx.Commit()
 	}
-	if !errors.Is(lookupErr, sql.ErrNoRows) { return result, lookupErr }
+	if !errors.Is(lookupErr, sql.ErrNoRows) {
+		return result, lookupErr
+	}
 
 	if expectedSize > quota.MaxSingleUploadBytes || quota.UsedBytes+quota.ReservedBytes+expectedSize > quota.MaxBytes {
 		return result, ErrQuotaExceeded
