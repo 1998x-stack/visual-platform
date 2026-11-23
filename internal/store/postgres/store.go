@@ -556,7 +556,10 @@ func (s *Store) CreateUploadSession(ctx context.Context, actorID, artifactID, so
 
 func (s *Store) GetUploadSession(ctx context.Context, id, actorID string) (domain.UploadSession, error) {
 	row := s.DB.QueryRowContext(ctx,
-		`SELECT us.`+strings.ReplaceAll(uploadSelectColumns, ",", ",us.")+`
+		`SELECT us.id::text,us.workspace_id::text,us.artifact_id::text,us.created_by::text,
+		 us.source_name,us.source_type,us.expected_size,us.expected_sha256,
+		 COALESCE(us.actual_size,0),COALESCE(us.actual_sha256,''),us.object_key,
+		 us.status,COALESCE(us.failure_code,''),us.expires_at,us.received_at,us.created_at
 		 FROM upload_sessions us
 		 JOIN workspace_members m ON m.workspace_id=us.workspace_id AND m.user_id=$2::uuid
 		 JOIN users u ON u.id=m.user_id
