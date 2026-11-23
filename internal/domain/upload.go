@@ -9,6 +9,7 @@ type UploadSession struct {
 	WorkspaceID    string     `json:"workspace_id"`
 	ArtifactID     string     `json:"artifact_id"`
 	CreatedBy      string     `json:"created_by"`
+	IdempotencyKey string     `json:"-"`
 	SourceName     string     `json:"source_name"`
 	SourceType     string     `json:"source_type"`
 	ExpectedSize   int64      `json:"expected_size"`

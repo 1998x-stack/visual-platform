@@ -409,9 +409,20 @@ func validUploadInput(name, kind string, size int64, checksum string) bool {
 	return err == nil
 }
 
-func (s *Store) CreateUploadSession(ctx context.Context, actorID, artifactID, sourceName, sourceType string, expectedSize int64, expectedSHA256 string) (domain.UploadSession, error) {
+func validIdempotencyKey(key string) bool {
+	if len(key) < 8 || len(key) > 128 { return false }
+	for _, r := range key {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || strings.ContainsRune("._:-", r)) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Store) CreateUploadSession(ctx context.Context, actorID, artifactID, idempotencyKey, sourceName, sourceType string, expectedSize int64, expectedSHA256 string) (domain.UploadSession, error) {
 	var result domain.UploadSession
-	if !validUploadInput(sourceName, sourceType, expectedSize, expectedSHA256) {
+	if !validUploadInput(sourceName, sourceType, expectedSize, expectedSHA256) || !validIdempotencyKey(idempotencyKey) {
 		return result, ErrConflict
 	}
 	expectedSHA256 = strings.ToLower(strings.TrimSpace(expectedSHA256))
@@ -523,6 +534,21 @@ func (s *Store) CreateUploadSession(ctx context.Context, actorID, artifactID, so
 		return result, err
 	}
 
+	existing, lookupErr := scanUpload(tx.QueryRowContext(ctx,
+		`SELECT `+uploadSelectColumns+`
+		 FROM upload_sessions
+		 WHERE workspace_id=$1::uuid AND created_by=$2::uuid AND idempotency_key=$3
+		 FOR UPDATE`, workspaceID, actorID, idempotencyKey))
+	if lookupErr == nil {
+		if existing.ArtifactID != artifactID || existing.SourceName != strings.TrimSpace(sourceName) ||
+			existing.SourceType != sourceType || existing.ExpectedSize != expectedSize ||
+			existing.ExpectedSHA256 != expectedSHA256 {
+			return result, ErrConflict
+		}
+		return existing, tx.Commit()
+	}
+	if !errors.Is(lookupErr, sql.ErrNoRows) { return result, lookupErr }
+
 	if expectedSize > quota.MaxSingleUploadBytes || quota.UsedBytes+quota.ReservedBytes+expectedSize > quota.MaxBytes {
 		return result, ErrQuotaExceeded
 	}
@@ -544,14 +570,14 @@ func (s *Store) CreateUploadSession(ctx context.Context, actorID, artifactID, so
 
 	row := tx.QueryRowContext(ctx,
 		`WITH new_id AS (SELECT gen_random_uuid() AS id)
-		 INSERT INTO upload_sessions(id,workspace_id,artifact_id,created_by,source_name,source_type,
+		 INSERT INTO upload_sessions(id,workspace_id,artifact_id,created_by,idempotency_key,source_name,source_type,
 		   expected_size,expected_sha256,object_key,expires_at)
-		 SELECT new_id.id,$1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7,
+		 SELECT new_id.id,$1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7,$8,
 		   'quarantine/'||($1::uuid)::text||'/'||($2::uuid)::text||'/'||new_id.id::text||'/source',
 		   now()+interval '30 minutes'
 		 FROM new_id
 		 RETURNING `+uploadSelectColumns,
-		workspaceID, artifactID, actorID, strings.TrimSpace(sourceName), sourceType, expectedSize, expectedSHA256)
+		workspaceID, artifactID, actorID, idempotencyKey, strings.TrimSpace(sourceName), sourceType, expectedSize, expectedSHA256)
 	result, err = scanUpload(row)
 	if err != nil {
 		return result, writeError(err)

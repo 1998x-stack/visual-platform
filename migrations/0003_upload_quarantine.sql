@@ -35,6 +35,38 @@ CREATE TABLE IF NOT EXISTS upload_sessions (
   workspace_id UUID NOT NULL,
   artifact_id UUID NOT NULL,
   created_by UUID NOT NULL REFERENCES users(id),
+  idempotency_key TEXT NOT NULL CHECK(idempotency_key ~ '^[A-Za-z0-9._:-]{8,128} CHECK(length(source_name) BETWEEN 1 AND 255),
+  source_type TEXT NOT NULL CHECK(source_type IN('html','zip')),
+  expected_size BIGINT NOT NULL CHECK(expected_size > 0),
+  expected_sha256 TEXT NOT NULL CHECK(expected_sha256 ~ '^[0-9a-f]{64}$'),
+  actual_size BIGINT,
+  actual_sha256 TEXT,
+  object_key TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'created'
+    CHECK(status IN('created','receiving','received','rejected','expired')),
+  lease_until TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ NOT NULL,
+  received_at TIMESTAMPTZ,
+  failure_code TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  FOREIGN KEY(workspace_id,artifact_id)
+    REFERENCES artifacts(workspace_id,id) ON DELETE CASCADE,
+  UNIQUE(workspace_id,created_by,idempotency_key),
+  CHECK(actual_size IS NULL OR actual_size >= 0),
+  CHECK(actual_sha256 IS NULL OR actual_sha256 ~ '^[0-9a-f]{64}$')
+);
+
+CREATE INDEX IF NOT EXISTS idx_upload_sessions_workspace_active
+  ON upload_sessions(workspace_id,status,expires_at);
+CREATE INDEX IF NOT EXISTS idx_upload_sessions_creator
+  ON upload_sessions(created_by,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_upload_sessions_expiry
+  ON upload_sessions(expires_at)
+  WHERE status IN('created','receiving');
+
+COMMIT;
+),
   source_name TEXT NOT NULL CHECK(length(source_name) BETWEEN 1 AND 255),
   source_type TEXT NOT NULL CHECK(source_type IN('html','zip')),
   expected_size BIGINT NOT NULL CHECK(expected_size > 0),
