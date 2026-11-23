@@ -3,7 +3,6 @@
 package httpapi
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -19,6 +18,7 @@ import (
 
 	"github.com/1998x-stack/visual-platform/internal/domain"
 	"github.com/1998x-stack/visual-platform/internal/permission"
+	"github.com/1998x-stack/visual-platform/internal/requestmeta"
 	"github.com/1998x-stack/visual-platform/internal/store/postgres"
 )
 
@@ -44,8 +44,6 @@ type Server struct {
 	DevAuth bool
 }
 
-type ctxKey string
-const requestIDKey ctxKey = "request-id"
 var uuid = regexp.MustCompile(`^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$`)
 var slug = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
@@ -74,7 +72,7 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("X-Request-ID", id)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")
-		mux.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIDKey, id)))
+		mux.ServeHTTP(w, r.WithContext(requestmeta.WithID(r.Context(), id)))
 	})
 }
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
@@ -284,7 +282,7 @@ func writeJSON(w http.ResponseWriter,status int,v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 func writeProblem(w http.ResponseWriter,r *http.Request,status int,code string){
-	id,_:=r.Context().Value(requestIDKey).(string)
+	id:=requestmeta.ID(r.Context())
 	writeJSON(w,status,map[string]any{"error":map[string]string{"code":code,"request_id":id}})
 }
 func (s *Server) fail(w http.ResponseWriter,r *http.Request,err error) {

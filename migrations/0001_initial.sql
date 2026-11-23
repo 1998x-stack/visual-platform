@@ -57,9 +57,19 @@ CREATE TABLE IF NOT EXISTS artifact_versions (
   UNIQUE(artifact_id,version_no),
   UNIQUE(artifact_id,id)
 );
-ALTER TABLE artifacts ADD CONSTRAINT current_version_same_artifact
-  FOREIGN KEY (id,current_version_id)
-  REFERENCES artifact_versions(artifact_id,id) DEFERRABLE INITIALLY IMMEDIATE;
+DO $
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'current_version_same_artifact'
+      AND conrelid = 'artifacts'::regclass
+  ) THEN
+    ALTER TABLE artifacts ADD CONSTRAINT current_version_same_artifact
+      FOREIGN KEY (id,current_version_id)
+      REFERENCES artifact_versions(artifact_id,id)
+      DEFERRABLE INITIALLY IMMEDIATE;
+  END IF;
+END $;
 
 CREATE TABLE IF NOT EXISTS artifact_acl (
   artifact_id UUID NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
@@ -79,6 +89,8 @@ CREATE TABLE IF NOT EXISTS audit_events (
   action TEXT NOT NULL,
   resource_type TEXT NOT NULL,
   resource_id UUID NOT NULL,
+  request_id TEXT NOT NULL DEFAULT '',
+  details JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_audit_events_resource ON audit_events(resource_type,resource_id,created_at DESC);

@@ -2,12 +2,14 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"database/sql"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/1998x-stack/visual-platform/internal/domain"
+	"github.com/1998x-stack/visual-platform/internal/requestmeta"
 )
 
 var (
@@ -43,7 +45,7 @@ func (s *Store) CreatePersonalWorkspace(ctx context.Context, userID, name string
 		`INSERT INTO workspace_members (workspace_id,user_id,role)
 		 VALUES ($1::uuid,$2::uuid,'owner')`,w.ID,userID)
 	if err != nil { return w, writeError(err) }
-	if err = appendAudit(ctx, tx, userID, "workspace.create", "workspace", w.ID); err != nil { return w, err }
+	if err = appendAudit(ctx, tx, userID, "workspace.create", "workspace", w.ID, map[string]any{"kind":"personal","name":name}); err != nil { return w, err }
 	return w, tx.Commit()
 }
 
@@ -114,7 +116,7 @@ func (s *Store) AddMember(ctx context.Context,workspaceID,actorID,targetID strin
 		 WHERE workspace_members.role <> 'owner'`,workspaceID,targetID,string(role))
 	if err!=nil{return writeError(err)}
 	n,err:=res.RowsAffected();if err!=nil{return err};if n!=1{return ErrDenied}
-	if err=appendAudit(ctx,tx,actorID,"workspace.member.upsert","workspace",workspaceID);err!=nil{return err}
+	if err=appendAudit(ctx,tx,actorID,"workspace.member.upsert","workspace",workspaceID,map[string]any{"target_user_id":targetID,"role":role});err!=nil{return err}
 	return tx.Commit()
 }
 
@@ -137,7 +139,7 @@ func (s *Store) CreateArtifact(ctx context.Context,workspaceID,actorID,slug stri
 		 RETURNING id::text,workspace_id::text,created_by::text,slug,status`,
 		workspaceID,actorID,slug).Scan(&a.ID,&a.WorkspaceID,&a.CreatedBy,&a.Slug,&a.Status)
 	if err!=nil{return a,writeError(err)}
-	if err=appendAudit(ctx,tx,actorID,"artifact.create","artifact",a.ID);err!=nil{return a,err}
+	if err=appendAudit(ctx,tx,actorID,"artifact.create","artifact",a.ID,map[string]any{"slug":slug});err!=nil{return a,err}
 	return a,tx.Commit()
 }
 func (s *Store) Artifact(ctx context.Context,id string) (domain.Artifact,error) {
@@ -209,7 +211,7 @@ func (s *Store) UpsertUserGrant(ctx context.Context,artifactID,actorID,targetID 
 		 DO UPDATE SET role=EXCLUDED.role,expires_at=EXCLUDED.expires_at,created_by=EXCLUDED.created_by`,
 		artifactID,targetID,string(role),expiry,actorID)
 	if err!=nil{return writeError(err)}
-	if err=appendAudit(ctx,tx,actorID,"artifact.acl.upsert","artifact",artifactID);err!=nil{return err}
+	if err=appendAudit(ctx,tx,actorID,"artifact.acl.upsert","artifact",artifactID,map[string]any{"target_user_id":targetID,"role":role,"expires_at":expiry});err!=nil{return err}
 	return tx.Commit()
 }
 
@@ -224,10 +226,14 @@ func lockOwner(ctx context.Context,tx *sql.Tx,workspaceID,actorID string) error 
 	if role!=domain.Owner{return ErrDenied}
 	return nil
 }
-func appendAudit(ctx context.Context,tx *sql.Tx,userID,action,resourceType,resourceID string) error {
-	_,err:=tx.ExecContext(ctx,
-		`INSERT INTO audit_events(actor_user_id,action,resource_type,resource_id)
-		 VALUES($1::uuid,$2,$3,$4::uuid)`,userID,action,resourceType,resourceID)
+func appendAudit(ctx context.Context,tx *sql.Tx,userID,action,resourceType,resourceID string, details map[string]any) error {
+	if details==nil { details=map[string]any{} }
+	raw,err:=json.Marshal(details)
+	if err!=nil {return fmt.Errorf("encode audit event: %w",err)}
+	_,err=tx.ExecContext(ctx,
+		`INSERT INTO audit_events(actor_user_id,action,resource_type,resource_id,request_id,details)
+		 VALUES($1::uuid,$2,$3,$4::uuid,$5,$6::jsonb)`,
+		userID,action,resourceType,resourceID,requestmeta.ID(ctx),string(raw))
 	if err!=nil{return fmt.Errorf("write audit event: %w",err)}
 	return nil
 }

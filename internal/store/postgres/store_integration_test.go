@@ -12,6 +12,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/1998x-stack/visual-platform/internal/domain"
+	"github.com/1998x-stack/visual-platform/internal/requestmeta"
 )
 
 func TestM1TransactionalIsolation(t *testing.T) {
@@ -24,6 +25,7 @@ func TestM1TransactionalIsolation(t *testing.T) {
 	defer cancel()
 	if err:=db.PingContext(ctx);err!=nil{t.Fatal(err)}
 	s:=&Store{DB:db}
+	ctx=requestmeta.WithID(ctx,"integration-m1-owner")
 	seedUser:=func(name string)string{
 		t.Helper()
 		var id string
@@ -70,6 +72,15 @@ func TestM1TransactionalIsolation(t *testing.T) {
 	}
 	exp:=time.Now().UTC().Add(time.Hour)
 	if err:=s.UpsertUserGrant(ctx,a.ID,alice,other,domain.Viewer,&exp);err!=nil{t.Fatal(err)}
+	var auditTarget,auditRole,auditRequest string
+	if err:=db.QueryRowContext(ctx,
+		`SELECT details->>'target_user_id',details->>'role',request_id
+		 FROM audit_events WHERE action='artifact.acl.upsert' AND resource_id=$1::uuid
+		 ORDER BY id DESC LIMIT 1`,a.ID).
+		Scan(&auditTarget,&auditRole,&auditRequest);err!=nil{t.Fatal(err)}
+	if auditTarget!=other||auditRole!="viewer"||auditRequest!="integration-m1-owner"{
+		t.Fatalf("audit not attributable: target=%s role=%s request=%s",auditTarget,auditRole,auditRequest)
+	}
 	grants,err:=s.Grants(ctx,a.ID)
 	if err!=nil||len(grants)!=1||grants[0].SubjectID!=other||grants[0].ExpiresAt==nil{
 		t.Fatalf("ACL mismatch: %+v %v",grants,err)
