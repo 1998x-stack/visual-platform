@@ -392,7 +392,6 @@ func mutateZIPMethod(data []byte, method uint16) {
 	}
 }
 
-
 func FuzzValidateZIPDoesNotPanic(f *testing.F) {
 	f.Add(makeZIPForFuzz("index.html", "<html></html>"))
 	f.Add([]byte("not a ZIP archive"))
