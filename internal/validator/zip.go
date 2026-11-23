@@ -361,7 +361,7 @@ func ValidateHTML(ctx context.Context, source io.ReaderAt, sourceSize, maxHTMLBy
 		return Manifest{}, reject(CodeInvalidArchive, "", errors.New("invalid HTML source or size"))
 	}
 	if maxHTMLBytes == 0 {
-		maxHTMLBytes = DefaultMaxHTMLBytes
+		maxHTMLBytes = defaultMaxHTMLBytes
 	}
 	if sourceSize > maxHTMLBytes {
 		return Manifest{}, reject(CodeFileTooLarge, "index.html", nil)
