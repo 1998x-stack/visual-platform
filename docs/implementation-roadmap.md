@@ -12,7 +12,7 @@
 |---|---|---|---|
 | M0 工程骨架 | Go API / Worker / Gateway 入口、配置、日志、迁移、Compose | 可启动的工程骨架 | health / ready、DB、MinIO 连通；CI 通过 |
 | M1 领域与权限 | User、Workspace、Member、Artifact、ACL、Authorizer | 数据模型与权限服务 | 完成 Owner / Maintainer / Editor / Viewer 正反向矩阵 |
-| M2 上传隔离 | Upload Session、配额、checksum、Quarantine | 可恢复上传会话 | 越权上传、配额超限、checksum 不符均被拒绝 |
+| M2 上传隔离 | Upload Session、Workspace Quota、checksum、私有 Quarantine | 可恢复上传会话 | **已实现**：越权、配额、长度、checksum、lease 测试通过；M4 janitor 尚未实现 |
 | M3 ZIP Validator | 路径、symlink、重复条目、大小、压缩比、Manifest | 安全静态站点包 | ZIP Slip / Bomb / symlink 测试集通过 |
 | M4 Job / Worker | PostgreSQL Job、SKIP LOCKED、Lease、Retry、Outbox | 可恢复后台处理 | Worker kill/restart 后任务恢复；重复消费幂等 |
 | M5 Publisher | 不可变对象前缀、Manifest 校验、current_version_id | 原子发布和回滚 | 故障注入不破坏旧版本；回滚只切指针 |
@@ -27,8 +27,8 @@
 1. PR-01：工程骨架、配置、结构化日志、健康检查、migration runner。
 2. PR-02：Workspace / Artifact / Version / ACL schema 与 repository。
 3. PR-03：统一 Authorizer、权限矩阵和负向测试。
-4. PR-04：Upload Session、Quarantine、配额、幂等键。
-5. PR-05：ZIP Validator、安全解压、Manifest、恶意样本。
+4. PR-04：Upload Session、Quarantine、配额、幂等键（已实现，见 M2）。
+5. PR-05：ZIP Validator、安全解压、Manifest、恶意样本（下一阶段 M3）。
 6. PR-06：Job Queue、Lease / Retry、Outbox、Worker。
 7. PR-07：不可变 Publisher、原子切换、回滚、孤儿对象清理。
 8. PR-08：Static Gateway、Host Mapping、路径规范化、响应头。
