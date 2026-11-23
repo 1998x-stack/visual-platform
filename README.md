@@ -99,7 +99,7 @@ npm run build:pdf
 - M0：Go API、健康检查、开发配置、CI。
 - M1：Workspace / Artifact / RBAC / ACL。
 - M2：Upload Session、Workspace Quota、流式上传、SHA-256 校验、私有 Quarantine 对象存储。
-- M3-A：ZIP 与 standalone HTML Validation Core 已在 `feat/m3-zip-validation-core` 分支实现，CI 结构检查通过；尚未接入 Worker。
+- M3-A：ZIP 与 standalone HTML Validation Core 已在 `feat/m3-zip-validation-core` 分支实现；Go / PostgreSQL CI 与 10 秒 Fuzz smoke 通过，PR #4 仍为 Draft；本地扩展 Fuzz 待执行。
 - M3-B/C：Quarantine Reader、恶意软件扫描和 Validation State Integration 尚未实现。
 - M4+：Job Worker、不可变发布、Static Gateway、企业 OIDC，尚未实现。
 
