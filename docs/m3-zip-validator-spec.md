@@ -121,7 +121,7 @@ Each entry:
 - `sha256`
 - `content_type`
 
-Entries are sorted by path. Timestamps, owner IDs, ZIP permissions, source object keys, and other nondeterministic / internal fields are excluded.
+Entries are sorted by publish path. For ZIP publication, the Publisher must read the exact `source_path` from the source archive and write those bytes to `path`; it must never infer the source entry by reversing the normalized path. `source_path` is validated and unique. Timestamps, owner IDs, ZIP permissions, source object keys, and other nondeterministic / internal fields are excluded.
 
 ## 8. Security boundary and follow-up
 
