@@ -342,3 +342,71 @@ func TestM3CUnreceivedUploadCannotEnqueue(t *testing.T) {
 		t.Fatalf("unreceived upload was enqueued: %v", err)
 	}
 }
+
+
+func TestM3CExpiredThirdLeaseExhaustsAttempts(t *testing.T) {
+	f := newValidationFixture(t)
+	f.enqueue(t, "m3c-expired-leases-0001", []byte("<html>lease</html>"))
+	var last domain.ValidationJob
+	for attempt := 1; attempt <= 3; attempt++ {
+		job, err := f.store.ClaimNextValidation(f.ctx)
+		if err != nil || job.AttemptCount != attempt {
+			t.Fatalf("claim attempt %d: %+v %v", attempt, job, err)
+		}
+		if last.ID != "" && job.LeaseToken == last.LeaseToken {
+			t.Fatal("expired lease token must be replaced")
+		}
+		if _, err := f.db.ExecContext(f.ctx,
+			`UPDATE validation_runs SET lease_until=now()-interval '1 second'
+			 WHERE id=$1::uuid`, job.ID); err != nil {
+			t.Fatal(err)
+		}
+		last = job
+	}
+	if _, err := f.store.ClaimNextValidation(f.ctx); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expired third attempt must be terminal: %v", err)
+	}
+	var status, reason string
+	if err := f.db.QueryRowContext(f.ctx,
+		`SELECT status,failure_code FROM validation_runs WHERE id=$1::uuid`, last.ID).
+		Scan(&status, &reason); err != nil {
+		t.Fatal(err)
+	}
+	if status != "failed" || reason != "retry_exhausted" {
+		t.Fatalf("unexpected terminal outcome: %s/%s", status, reason)
+	}
+	if err := completeHTML(t, f, last, []byte("<html>lease</html>")); !errors.Is(err, ErrConflict) {
+		t.Fatalf("expired third worker must not report clean: %v", err)
+	}
+}
+
+func TestM3CRejectsStaleOrFutureSignatureEvidence(t *testing.T) {
+	f := newValidationFixture(t)
+	data := []byte("<html>signature</html>")
+	f.enqueue(t, "m3c-signature-0001", data)
+	job, err := f.store.ClaimNextValidation(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := validator.ValidateHTML(f.ctx, bytes.NewReader(data), int64(len(data)), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	completion := ValidationCompletion{
+		JobID: job.ID, LeaseToken: job.LeaseToken, SourceSHA256: job.SourceSHA256,
+		Manifest: manifest,
+		Scan: scanner.Summary{ScannedFiles: 1, ScannedBytes: manifest.TotalUncompressedBytes},
+		ScannerVersion: "clamav-1.4.3",
+		SignatureVersion: "daily-1234",
+	}
+	for _, bad := range []time.Time{time.Now().UTC().Add(-49 * time.Hour), time.Now().UTC().Add(10 * time.Minute)} {
+		completion.SignaturesUpdatedAt = bad
+		if err := f.store.CompleteValidation(f.ctx, completion); !errors.Is(err, ErrConflict) {
+			t.Fatalf("invalid signature timestamp %v was accepted: %v", bad, err)
+		}
+	}
+	completion.SignaturesUpdatedAt = time.Now().UTC().Add(-time.Minute)
+	if err := f.store.CompleteValidation(f.ctx, completion); err != nil {
+		t.Fatalf("valid current signatures rejected: %v", err)
+	}
+}
