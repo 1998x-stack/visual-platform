@@ -29,3 +29,17 @@ The existing Go workflow used `apt-get update && apt-get install postgresql-clie
 ## M3-A: Validation is not a publication grant
 
 The `received` Upload Session state and a valid Manifest do not prove that the content is safe. M3-A long fuzzing, real Vite artifacts, and resource-profile evidence remain NOT RUN. M3-B must not cause any unscanned file to reach a public Origin. Browser content isolation remains mandatory even after ClamAV reports clean.
+
+## M3-C: retryable rows need a failure reason but must not carry one into a new running lease
+
+**Observed:** PostgreSQL 18 integration test `TestM3CRetryAndTerminalFailures` failed in Actions run `45323172373` with CHECK violation `validation_runs_check3`. The transition from running to retryable correctly stored `failure_code='scanner_unavailable'`, but the original CHECK only allowed non-null failure codes for terminal rejected/failed states.
+
+**Root cause:** Schema incorrectly conflated "has a diagnostic reason" with "terminal failure". A retryable state must retain the reason. Conversely, a new running lease must clear the old transient diagnostic so its state cannot be confused with a current scan result.
+
+**Fix:** Allow the failure_code exactly in retryable/rejected/failed states; reset `failure_code=NULL` every time `ClaimNextValidation` grants a fresh lease. The CHECK remains strict for pending/running/validated. Regression: real PostgreSQL multi-attempt test, plus expired 3rd lease and stale signature tests.
+
+**Recheck:** Full `go test -race -count=1 ./...` with `DB_TEST_URL` and new migration replay must PASS on the final commit. Earlier red runs must not be counted as evidence.
+
+## M3-C: source fingerprint binding is not proof of scanner input authenticity
+
+`CompleteValidation` verifies the Worker's submitted source digest against M2 DB metadata and the source snapshot; it does not independently read S3 or inspect ClamAV. M4 must hash the *actual downloaded object bytes* in a private bounded spool and use exactly the same spool for ZIP/HTML validation and per-entry scanning. If any operation fails or a digest differs, do not mark the validation as clean. Never expose the completion API to users.

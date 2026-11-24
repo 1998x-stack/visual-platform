@@ -11,8 +11,8 @@
 | M2 上传隔离 | 已实现（开发基线） | Upload Session、配额预留、流式 Quarantine 写入、SHA-256、会话租约、重试、状态审计 | 生产级 MinIO 部署、生命周期清理 Worker、断点续传、多段上传未实现 |
 | M3 ZIP Validator | 进行中（PR #4；CI 通过） | ZIP / standalone HTML Validation Core、无磁盘解压、中央目录预检、路径 / 类型 / 大小 / 压缩比 / 数据重叠检查、CRC / SHA-256、确定性 Manifest、攻击样本与 10 秒 Fuzz smoke（最新代码 revision 425,209 execs） | 尚未合并；本地长时间 Fuzz / 真实站点样本验证待执行；尚未接入 Quarantine Reader、ClamAV、Job Worker、数据库状态和 Manifest 持久化 |
 | M3-B Reader & Scanner | Draft PR #5（待集成验收） | 独立只读 S3 Adapter、Unix Socket ClamAV INSTREAM、逐文件 ScanManifest / SHA-256、模拟扫描器和长度限制测试、示例 IAM Policy | 真实 ClamAV / MinIO IAM 负向集成、签名库健康证明、Worker 调用与状态持久化均未完成 |
-| M3-C Validation State | 未实现 | — | source SHA256、Manifest 版本、Scanner Verdict、重试 / 审计持久化 |
-| M4 Job / Worker | 未实现 | — | SKIP LOCKED、Lease、Retry、Outbox、幂等消费 |
+| M3-C Validation State | Draft PR #6（CI 与集成验收进行中） | `0004_validation_runs.sql`、源 SHA256/大小绑定、Manifest JSONB 与 SHA256、Scanner 版本/病毒库时间、SKIP LOCKED、UUID 租约 fencing、限次重试、审计、PostgreSQL 并发测试 | 尚未合并；真实 Worker、Scanner VERSION/签名信息提取与 S3 对象字节重算未实现 |
+| M4 Job / Worker | 未实现 | M3-C 提供数据库领取与租约基本接口（未接线） | 真正 Worker Loop、私有磁盘 Spool、续租/取消、真实扫描与证据、Outbox、幂等消费 |
 | M5 Publisher | 未实现 | — | 不可变对象版本、Manifest 校验、原子指针切换、回滚 |
 | M6 Static Gateway | 未实现 | — | Host Mapping、每请求授权、路径规范化、响应安全头 |
 | M7 SSO / Organization | 未实现 | — | OIDC、PKCE、Ticket Exchange、部门 / 项目同步 |
@@ -140,3 +140,14 @@ CI 在 PostgreSQL 18 上运行：
 - 本轮实际由 CI 揭示并修复了 INSTREAM EOF frame 未清零的问题；详见 `docs/gotchas.md`。
 - 暂无真正启动的 Worker、S3 spool、数据库验证状态或任何发布能力。
 - ClamAV daemon / MinIO IAM 真实集成与签名库版本验证仍 **NOT RUN**。不能把模拟 Socket 测试当成真实安全扫描验收。
+
+## M3-C Validation State（Draft PR #6）
+
+- Stacked PR：[M3-C #6](https://github.com/1998x-stack/visual-platform/pull/6)，base 是 M3-B Draft PR #5，M3-B 仍依赖 M3-A PR #4。
+- 新增 `migrations/0004_validation_runs.sql`：每个 received 上传最多一个验证生命周期；status 为 pending/running/retryable/validated/rejected/failed，独立于 Upload Session.status。
+- DB 生成每次新的 `lease_token`；过期令牌、并发抢占、错误 SHA256 或重复完成都不能写入 validated。
+- 仅在所有 Manifest entry、扫描条目数与字节数一致，并且扫描器版本/签名时间满足证据要求后，才允许成功状态持久化；存储层不直接执行 AV。
+- 并发测试覆盖 SKIP LOCKED、旧令牌 fencing、最多三次重试、第三次租约超时终止和病毒库签名过期拒绝。
+- `validated` 不等于 `published`，外部 API 仍无验证状态写入口，真正 Worker 尚未实现。
+- CI 发现的 Retryable 状态 CHECK 与旧失败码冲突已经修正；记录于 `docs/gotchas.md`。
+- M3-A 长期 Fuzz、真实 ZIP；M3-B 真实 MinIO IAM / ClamAV 测试仍为 **NOT RUN**，因此整个发布链路仍不能上线。
