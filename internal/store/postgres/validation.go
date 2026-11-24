@@ -76,7 +76,7 @@ func (s *Store) EnqueueValidation(ctx context.Context, uploadID string) (domain.
 		  AND u.actual_size=u.expected_size AND u.actual_sha256=u.expected_sha256`, uploadID).
 		Scan(&record.ID, &record.UploadID, &record.ArtifactID, &record.Status,
 			&record.AttemptCount, &record.ManifestSHA256, &record.FailureCode, &record.CompletedAt)
-	if errors.Is(err, sqlErrNoRows()) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return record, ErrConflict
 	}
 	if err != nil {
@@ -169,7 +169,7 @@ func (s *Store) ClaimNextValidation(ctx context.Context) (domain.ValidationJob, 
 			&job.ObjectKey, &job.SourceType, &job.SourceSize, &job.SourceSHA256,
 			&job.Status, &job.AttemptCount, &job.MaxAttempts, &job.LeaseToken,
 			&job.LeaseUntil, &job.NextAttemptAt)
-	if errors.Is(err, sqlErrNoRows()) {
+	if errors.Is(err, sql.ErrNoRows) {
 		if err := tx.Commit(); err != nil {
 			return domain.ValidationJob{}, err
 		}
@@ -225,7 +225,7 @@ func (s *Store) CompleteValidation(ctx context.Context, completion ValidationCom
 		  AND v.lease_token=$2::uuid AND v.lease_until>now()
 		FOR UPDATE OF v,u`, completion.JobID, completion.LeaseToken).
 		Scan(&sourceSize, &sourceSHA, &sourceType, &uploadStatus, &uploadSHA, &uploadSize)
-	if errors.Is(err, sqlErrNoRows()) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return ErrConflict
 	}
 	if err != nil {
@@ -290,7 +290,7 @@ func (s *Store) FinishValidationFailure(ctx context.Context, jobID, leaseToken, 
 		WHERE id=$1::uuid AND status='running'
 		  AND lease_token=$2::uuid AND lease_until>now()
 		FOR UPDATE`, jobID, leaseToken).Scan(&attempts, &maximum)
-	if errors.Is(err, sqlErrNoRows()) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrConflict
 	}
 	if err != nil {
