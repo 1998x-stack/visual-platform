@@ -343,7 +343,6 @@ func TestM3CUnreceivedUploadCannotEnqueue(t *testing.T) {
 	}
 }
 
-
 func TestM3CExpiredThirdLeaseExhaustsAttempts(t *testing.T) {
 	f := newValidationFixture(t)
 	f.enqueue(t, "m3c-expired-leases-0001", []byte("<html>lease</html>"))
@@ -394,9 +393,9 @@ func TestM3CRejectsStaleOrFutureSignatureEvidence(t *testing.T) {
 	}
 	completion := ValidationCompletion{
 		JobID: job.ID, LeaseToken: job.LeaseToken, SourceSHA256: job.SourceSHA256,
-		Manifest: manifest,
-		Scan: scanner.Summary{ScannedFiles: 1, ScannedBytes: manifest.TotalUncompressedBytes},
-		ScannerVersion: "clamav-1.4.3",
+		Manifest:         manifest,
+		Scan:             scanner.Summary{ScannedFiles: 1, ScannedBytes: manifest.TotalUncompressedBytes},
+		ScannerVersion:   "clamav-1.4.3",
 		SignatureVersion: "daily-1234",
 	}
 	for _, bad := range []time.Time{time.Now().UTC().Add(-49 * time.Hour), time.Now().UTC().Add(10 * time.Minute)} {
