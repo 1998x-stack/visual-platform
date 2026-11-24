@@ -137,6 +137,9 @@ func setup(t *testing.T, kind string, bytesOnDisk []byte) (*Processor, *fakeRepo
 	reader := &fakeReader{data: bytesOnDisk}
 	engine := &fakeEngine{}
 	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
 	p, err := NewProcessor(repo, reader, engine, Config{TempDir: dir}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
