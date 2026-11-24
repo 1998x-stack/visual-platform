@@ -13,6 +13,8 @@ func TestNewReaderRequiresIndependentPrivateCredentials(t *testing.T) {
 		{Endpoint: "http://localhost:9000", AccessKey: "a", SecretKey: "b", Bucket: "quarantine", Secure: true},
 		{Endpoint: "localhost:9000", AccessKey: "", SecretKey: "b", Bucket: "quarantine", Secure: true},
 		{Endpoint: "localhost:9000", AccessKey: "a", SecretKey: "b", Bucket: "quarantine", Secure: false},
+		{Endpoint: "example.com:9000", AccessKey: "a", SecretKey: "b", Bucket: "quarantine", Secure: false, AllowInsecureDevelopment: true},
+		{Endpoint: "192.0.2.1:9000", AccessKey: "a", SecretKey: "b", Bucket: "quarantine", Secure: false, AllowInsecureDevelopment: true},
 	}
 	for _, cfg := range cases {
 		if _, err := NewReader(cfg); err == nil {
