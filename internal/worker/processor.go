@@ -298,8 +298,11 @@ type contextReader struct {
 	ctx    context.Context
 	source io.Reader
 }
+
 func (r *contextReader) Read(b []byte) (int, error) {
-	if err := r.ctx.Err(); err != nil { return 0, err }
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
 	return r.source.Read(b)
 }
 

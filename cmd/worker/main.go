@@ -78,7 +78,7 @@ func run(ctx context.Context, once bool, logger *slog.Logger) error {
 		return err
 	}
 	daemon, err := clamd.New(clamd.Config{
-		SocketPath: socket, Timeout: 45*time.Second, MaxStreamBytes: 64 << 20,
+		SocketPath: socket, Timeout: 45 * time.Second, MaxStreamBytes: 64 << 20,
 	})
 	if err != nil {
 		return err

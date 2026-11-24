@@ -67,4 +67,3 @@ func (s *Store) EnqueueReceivedBatch(ctx context.Context, limit int) (int, error
 	}
 	return len(ids), nil
 }
-

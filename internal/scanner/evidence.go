@@ -8,8 +8,8 @@ import (
 // Evidence identifies the engine and signature database checked by a scanner.
 // It is metadata, not proof that a scan completed or detected every threat.
 type Evidence struct {
-	EngineVersion      string
-	SignatureVersion   string
+	EngineVersion       string
+	SignatureVersion    string
 	SignaturesUpdatedAt time.Time
 }
 
