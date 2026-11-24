@@ -101,7 +101,7 @@ npm run build:pdf
 - M2：Upload Session、Workspace Quota、流式上传、SHA-256 校验、私有 Quarantine 对象存储。
 - M3-A：ZIP 与 standalone HTML Validation Core 已在 `feat/m3-zip-validation-core` 分支实现；Go / PostgreSQL CI 与 10 秒 Fuzz smoke 通过，PR #4 仍为 Draft；本地扩展 Fuzz 待执行。
 - M3-B：独立 Quarantine Reader、ClamAV INSTREAM 扫描适配器及逐文件 Manifest 哈希复核已提交至 [Draft PR #5](https://github.com/1998x-stack/visual-platform/pull/5)，等待 CI 与真实 MinIO/ClamAV 集成验收；尚未接入 Worker。
-- M3-C：Validation State / Manifest Persistence 尚未实现。
+- M3-C：验证状态数据库 Migration、source SHA-256 绑定、Manifest 与扫描证据入库、Worker 租约 fencing、失败分级重试和 PostgreSQL 并发测试已提交至 [Draft PR #6](https://github.com/1998x-stack/visual-platform/pull/6)，仍待独立验收，尚未连接生产 Worker。
 - M4+：Job Worker、不可变发布、Static Gateway、企业 OIDC，尚未实现。
 
 详细状态见 [implementation-status.md](docs/implementation-status.md)。
