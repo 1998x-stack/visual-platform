@@ -18,20 +18,20 @@ const (
 // ValidationJob is a worker-only object. Never serialize this as a public API:
 // both ObjectKey and LeaseToken are privileged internal capabilities.
 type ValidationJob struct {
-	ID                string
-	UploadID          string
-	WorkspaceID       string
-	ArtifactID        string
-	ObjectKey         string
-	SourceType        string
-	SourceSize        int64
-	SourceSHA256      string
-	Status            ValidationStatus
-	AttemptCount      int
-	MaxAttempts       int
-	LeaseToken        string
-	LeaseUntil        time.Time
-	NextAttemptAt     time.Time
+	ID            string
+	UploadID      string
+	WorkspaceID   string
+	ArtifactID    string
+	ObjectKey     string
+	SourceType    string
+	SourceSize    int64
+	SourceSHA256  string
+	Status        ValidationStatus
+	AttemptCount  int
+	MaxAttempts   int
+	LeaseToken    string
+	LeaseUntil    time.Time
+	NextAttemptAt time.Time
 }
 
 // ValidationRecord exposes internal lifecycle metadata but no S3 object key,

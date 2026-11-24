@@ -2,8 +2,8 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -26,7 +26,7 @@ const (
 )
 
 var (
-	validHash = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	validHash     = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	validEvidence = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._:+/-]{0,127}$`)
 )
 
@@ -260,9 +260,9 @@ func (s *Store) CompleteValidation(ctx context.Context, completion ValidationCom
 	}
 	if err := appendValidationAudit(ctx, tx, "validation.validated", completion.JobID,
 		map[string]any{"manifest_sha256": manifestHash,
-			"scanned_files": completion.Scan.ScannedFiles,
-			"scanned_bytes": completion.Scan.ScannedBytes,
-			"scanner_version": completion.ScannerVersion,
+			"scanned_files":     completion.Scan.ScannedFiles,
+			"scanned_bytes":     completion.Scan.ScannedBytes,
+			"scanner_version":   completion.ScannerVersion,
 			"signature_version": completion.SignatureVersion}); err != nil {
 		return err
 	}

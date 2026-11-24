@@ -3,8 +3,8 @@ package postgres
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -23,10 +23,10 @@ import (
 )
 
 type validationFixture struct {
-	db *sql.DB
-	store *Store
-	ctx context.Context
-	owner string
+	db       *sql.DB
+	store    *Store
+	ctx      context.Context
+	owner    string
 	artifact string
 }
 
@@ -105,8 +105,8 @@ func completeHTML(t *testing.T, f validationFixture, job domain.ValidationJob, d
 			ScannedFiles: len(manifest.Entries),
 			ScannedBytes: manifest.TotalUncompressedBytes,
 		},
-		ScannerVersion: "clamav-1.4.3",
-		SignatureVersion: "daily-1234",
+		ScannerVersion:      "clamav-1.4.3",
+		SignatureVersion:    "daily-1234",
 		SignaturesUpdatedAt: time.Now().UTC().Add(-time.Hour),
 	})
 }
@@ -267,7 +267,7 @@ func TestM3CSourceBindingAndEvidenceGate(t *testing.T) {
 	if err := f.store.CompleteValidation(f.ctx, ValidationCompletion{
 		JobID: job.ID, LeaseToken: job.LeaseToken,
 		SourceSHA256: job.SourceSHA256, Manifest: manifest,
-		Scan: scanner.Summary{ScannedFiles: 0, ScannedBytes: manifest.TotalUncompressedBytes},
+		Scan:           scanner.Summary{ScannedFiles: 0, ScannedBytes: manifest.TotalUncompressedBytes},
 		ScannerVersion: "clamav-1", SignatureVersion: "daily-1",
 		SignaturesUpdatedAt: time.Now().UTC(),
 	}); !errors.Is(err, ErrConflict) {
