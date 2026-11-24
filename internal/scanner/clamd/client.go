@@ -141,6 +141,8 @@ func (c *Client) Scan(ctx context.Context, source io.Reader, declaredSize int64)
 		return scanner.Result{}, errors.New("scan input did not confirm EOF")
 	}
 
+	// INSTREAM is terminated by a zero-length chunk, never the last chunk's length.
+	binary.BigEndian.PutUint32(header[:], 0)
 	if _, err := conn.Write(header[:]); err != nil {
 		return scanner.Result{}, fmt.Errorf("finish clamd stream: %w", err)
 	}
