@@ -157,7 +157,7 @@ func (s *Store) ClaimNextValidation(ctx context.Context) (domain.ValidationJob, 
 		  UPDATE validation_runs v
 		  SET status='running',lease_token=gen_random_uuid(),
 		    lease_until=now()+interval '5 minutes',attempt_count=attempt_count+1,
-		    updated_at=now()
+		    failure_code=NULL,updated_at=now()
 		  FROM candidate WHERE v.id=candidate.id
 		  RETURNING v.*
 		)
