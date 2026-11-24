@@ -42,7 +42,7 @@ func TestExactSizeReadCloser(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			reader := &exactSizeReadCloser{
-				source: io.NopCloser(strings.NewReader(tc.data)),
+				source:   io.NopCloser(strings.NewReader(tc.data)),
 				expected: tc.want,
 			}
 			actual, err := io.ReadAll(reader)

@@ -12,9 +12,9 @@ import (
 )
 
 type fakeEngine struct {
-	scans []string
+	scans   []string
 	verdict Verdict
-	lazy bool
+	lazy    bool
 }
 
 func (e *fakeEngine) Scan(_ context.Context, source io.Reader, declaredSize int64) (Result, error) {
@@ -101,27 +101,27 @@ func TestScanManifestFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cases := []struct{
-		name string
+	cases := []struct {
+		name   string
 		modify func(*validator.Manifest)
 		engine *fakeEngine
 	}{
-		{name:"malformed manifest hash",modify:func(m *validator.Manifest){m.Entries[0].SHA256 = strings.Repeat("0",64)},engine:&fakeEngine{verdict:VerdictClean}},
-		{name:"incorrect source mapping",modify:func(m *validator.Manifest){m.Entries[0].SourcePath = "missing.js"},engine:&fakeEngine{verdict:VerdictClean}},
-		{name:"duplicate publish path",modify:func(m *validator.Manifest){m.Entries[1].Path = m.Entries[0].Path},engine:&fakeEngine{verdict:VerdictClean}},
-		{name:"lazy scanner",modify:func(m *validator.Manifest){},engine:&fakeEngine{lazy:true}},
-		{name:"unknown verdict",modify:func(m *validator.Manifest){},engine:&fakeEngine{}},
-		{name:"virus detected",modify:func(m *validator.Manifest){},engine:&fakeEngine{verdict:VerdictInfected}},
-		{name:"inconsistent size",modify:func(m *validator.Manifest){m.Entries[0].Size++},engine:&fakeEngine{verdict:VerdictClean}},
+		{name: "malformed manifest hash", modify: func(m *validator.Manifest) { m.Entries[0].SHA256 = strings.Repeat("0", 64) }, engine: &fakeEngine{verdict: VerdictClean}},
+		{name: "incorrect source mapping", modify: func(m *validator.Manifest) { m.Entries[0].SourcePath = "missing.js" }, engine: &fakeEngine{verdict: VerdictClean}},
+		{name: "duplicate publish path", modify: func(m *validator.Manifest) { m.Entries[1].Path = m.Entries[0].Path }, engine: &fakeEngine{verdict: VerdictClean}},
+		{name: "lazy scanner", modify: func(m *validator.Manifest) {}, engine: &fakeEngine{lazy: true}},
+		{name: "unknown verdict", modify: func(m *validator.Manifest) {}, engine: &fakeEngine{}},
+		{name: "virus detected", modify: func(m *validator.Manifest) {}, engine: &fakeEngine{verdict: VerdictInfected}},
+		{name: "inconsistent size", modify: func(m *validator.Manifest) { m.Entries[0].Size++ }, engine: &fakeEngine{verdict: VerdictClean}},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name,func(t *testing.T){
-			copyManifest:=manifest
-			copyManifest.Entries=append([]validator.ManifestEntry(nil),manifest.Entries...)
+		t.Run(tc.name, func(t *testing.T) {
+			copyManifest := manifest
+			copyManifest.Entries = append([]validator.ManifestEntry(nil), manifest.Entries...)
 			tc.modify(&copyManifest)
-			result,err:=ScanManifest(context.Background(),bytes.NewReader(data),int64(len(data)),"zip",copyManifest,tc.engine)
-			if err==nil || result.ScannedFiles!=0 {
-				t.Fatalf("expected fail closed result; got %+v, %v",result,err)
+			result, err := ScanManifest(context.Background(), bytes.NewReader(data), int64(len(data)), "zip", copyManifest, tc.engine)
+			if err == nil || result.ScannedFiles != 0 {
+				t.Fatalf("expected fail closed result; got %+v, %v", result, err)
 			}
 		})
 	}
@@ -135,7 +135,7 @@ func TestScanManifestCanceledContext(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := ScanManifest(ctx, bytes.NewReader(data), int64(len(data)), "html", manifest, &fakeEngine{verdict:VerdictClean}); err == nil {
+	if _, err := ScanManifest(ctx, bytes.NewReader(data), int64(len(data)), "html", manifest, &fakeEngine{verdict: VerdictClean}); err == nil {
 		t.Fatal("canceled scan did not fail")
 	}
 }

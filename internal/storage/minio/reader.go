@@ -48,7 +48,7 @@ func NewReader(cfg ReaderConfig) (*Reader, error) {
 		return nil, errors.New("quarantine reader requires TLS outside isolated development")
 	}
 	client, err := minioSDK.New(cfg.Endpoint, &minioSDK.Options{
-		Creds: credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
 		Secure: cfg.Secure,
 		Region: cfg.Region,
 	})
