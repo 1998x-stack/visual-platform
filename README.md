@@ -102,7 +102,8 @@ npm run build:pdf
 - M3-A：ZIP 与 standalone HTML Validation Core 已在 `feat/m3-zip-validation-core` 分支实现；Go / PostgreSQL CI 与 10 秒 Fuzz smoke 通过，PR #4 仍为 Draft；本地扩展 Fuzz 待执行。
 - M3-B：独立 Quarantine Reader、ClamAV INSTREAM 扫描适配器及逐文件 Manifest 哈希复核已提交至 [Draft PR #5](https://github.com/1998x-stack/visual-platform/pull/5)，等待 CI 与真实 MinIO/ClamAV 集成验收；尚未接入 Worker。
 - M3-C：验证状态数据库 Migration、source SHA-256 绑定、Manifest 与扫描证据入库、Worker 租约 fencing、失败分级重试和 PostgreSQL 并发测试已提交至 [Draft PR #6](https://github.com/1998x-stack/visual-platform/pull/6)，仍待独立验收，尚未连接生产 Worker。
-- M4+：Job Worker、不可变发布、Static Gateway、企业 OIDC，尚未实现。
+- M4-A：真实 Go Worker 入口、Received Upload 补偿入队、私有 0700 Spool、下载 SHA-256 复核、HTML/ZIP 校验与逐文件 ClamAV 扫描、双重 VERSION 证据检测已提交至 [Draft PR #7](https://github.com/1998x-stack/visual-platform/pull/7)。CI 单元 / PostgreSQL 集成测试已运行；真实 MinIO/ClamAV 集成、安全限额与上线验收仍 **NOT RUN**。
+- M4-B / M5+：真实存储/杀毒服务 E2E、租约续期/磁盘配额、不可变发布、Static Gateway、企业 OIDC 尚未实现。
 
 详细状态见 [implementation-status.md](docs/implementation-status.md)。
 
@@ -136,6 +137,14 @@ make api-dev
 M2 只接收 HTML / ZIP 声明类型，**不信任客户端 MIME，也不解压 ZIP、不扫描、不生成发布 Manifest、不提供下载或公开 URL**。上传成功状态 `received` 仅表示字节已写入隔离区且 SHA-256 一致，不表示内容安全或可发布。
 
 对象存储需配置 `S3_ENDPOINT`、`S3_ACCESS_KEY`、`S3_SECRET_KEY`、`S3_BUCKET`。Bucket 必须预先创建、保持私有且无显式 Bucket Policy；API 不会自动创建 Bucket，也不会生成预签名 URL。请给 API 配置仅限 Quarantine Bucket 的最小权限凭据。非 development 环境强制 S3_USE_SSL=true。
+
+## M4-A 验证 Worker（实验性，尚未生产验收）
+
+Worker 从数据库领取 `received` 上传的验证任务，下载到私有临时文件，复核完整源 SHA-256，运行 ZIP/HTML Validator 与 ClamAV INSTREAM 扫描。**任何扫描通过都不会自动发布或对外提供 URL。**
+
+`make migrate` 已自动应用包括 0004 在内的所有非 Seed Migration；可运行 `make worker-once` 做一次迭代，或运行 `make worker-dev` 启动单消费者循环。运行前必须配置 `DATABASE_URL`、单独的 `WORKER_S3_ACCESS_KEY` / `WORKER_S3_SECRET_KEY`、`S3_ENDPOINT`、`S3_BUCKET`、`CLAMD_SOCKET` 和用户独占的 `WORKER_TEMP_DIR`（0700 权限）。完整配置和门槛见 [M4-A 技术设计](docs/m4a-worker-pipeline-spec.md) 与 [Worker 环境变量模板](deploy/worker.env.example)。
+
+真实 MinIO Get-only 策略、真实 ClamAV 病毒与超限扫描、数据库签名时间解释及磁盘压力保护仍需独立验收。该入口**不得作为生产部署已完成的依据**。
 
 ## GitHub Pages
 

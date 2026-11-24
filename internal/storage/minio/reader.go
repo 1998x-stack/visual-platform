@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 
 	minioSDK "github.com/minio/minio-go/v7"
@@ -44,8 +45,8 @@ func NewReader(cfg ReaderConfig) (*Reader, error) {
 	if strings.Contains(cfg.Endpoint, "://") || strings.ContainsAny(cfg.Endpoint, "/?#") {
 		return nil, errors.New("quarantine S3 endpoint must be a host:port")
 	}
-	if !cfg.Secure && !cfg.AllowInsecureDevelopment {
-		return nil, errors.New("quarantine reader requires TLS outside isolated development")
+	if !cfg.Secure && (!cfg.AllowInsecureDevelopment || !loopbackObjectEndpoint(cfg.Endpoint)) {
+		return nil, errors.New("quarantine reader requires TLS except on explicitly approved loopback development endpoints")
 	}
 	client, err := minioSDK.New(cfg.Endpoint, &minioSDK.Options{
 		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
@@ -121,3 +122,15 @@ func (r *exactSizeReadCloser) Close() error {
 }
 
 var _ storage.QuarantineReader = (*Reader)(nil)
+
+func loopbackObjectEndpoint(endpoint string) bool {
+	host, _, err := net.SplitHostPort(endpoint)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
