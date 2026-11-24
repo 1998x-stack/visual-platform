@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS validation_runs (
     scanner_version IS NOT NULL AND signature_version IS NOT NULL AND
     signatures_updated_at IS NOT NULL)),
   CHECK ((status IN ('validated','rejected','failed')) = (completed_at IS NOT NULL)),
-  CHECK ((status IN ('rejected','failed')) = (failure_code IS NOT NULL)),
+  CHECK ((status IN ('retryable','rejected','failed')) = (failure_code IS NOT NULL)),
   CHECK (status <> 'validated' OR failure_code IS NULL),
   CHECK (status <> 'validated' OR scanned_bytes <= 536870912)
 );
