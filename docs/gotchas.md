@@ -43,3 +43,21 @@ The `received` Upload Session state and a valid Manifest do not prove that the c
 ## M3-C: source fingerprint binding is not proof of scanner input authenticity
 
 `CompleteValidation` verifies the Worker's submitted source digest against M2 DB metadata and the source snapshot; it does not independently read S3 or inspect ClamAV. M4 must hash the *actual downloaded object bytes* in a private bounded spool and use exactly the same spool for ZIP/HTML validation and per-entry scanning. If any operation fails or a digest differs, do not mark the validation as clean. Never expose the completion API to users.
+
+## M4-A: Worker test temp directory must meet the 0700 policy
+
+**Observed:** GitHub CI [run #45338661765](https://github.com/1998x-stack/visual-platform/actions/runs/45338661765) showed that Go build/vet/PostgreSQL checks passed, but new Worker tests refused their own `t.TempDir()` fixture with `private spool must be a non-symlink 0700 directory`.
+
+**Root cause:** The test temp directory did not have the worker-required owner-only permissions on the CI runner. Production code correctly refused a potentially readable workspace.
+
+**Fix:** Explicitly `os.Chmod(dir, 0700)` in the test fixture. Keep the negative tests that reject 0755 directories and symbolic links; do not weaken production checks.
+
+## M4-A: Local Makefile migration drift
+
+**Observed:** CI applied 0004_validation_runs.sql, but local `make migrate` still applied only migrations 0001 and 0003. Worker operation against a locally provisioned schema would fail.
+
+**Fix:** `make migrate` now executes all sorted numbered SQL migrations except explicit Seed files. The Worker documentation uses `make migrate` before its first run. CI must continue reapplying migrations to test idempotency.
+
+## M4-A: ClamAV VERSION date and daemon size limits need real proof
+
+ClamAV VERSION carries a database version and date but not a reliable timezone marker in common output. The M4-A implementation treats unzoned dates as UTC and rejects unknown/stale values; before production validate the installed daemon's actual timezone and DB signature provenance, `StreamMaxLength`, `MaxFileSize`, `MaxScanSize`, and `AlertExceedsMax`. A clean reply from a fake Unix socket is not evidence of virus detection efficacy. Real ClamAV EICAR and MinIO IAM negative integration tests remain NOT RUN.

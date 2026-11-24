@@ -11,8 +11,8 @@
 | M2 上传隔离 | 已实现（开发基线） | Upload Session、配额预留、流式 Quarantine 写入、SHA-256、会话租约、重试、状态审计 | 生产级 MinIO 部署、生命周期清理 Worker、断点续传、多段上传未实现 |
 | M3 ZIP Validator | 进行中（PR #4；CI 通过） | ZIP / standalone HTML Validation Core、无磁盘解压、中央目录预检、路径 / 类型 / 大小 / 压缩比 / 数据重叠检查、CRC / SHA-256、确定性 Manifest、攻击样本与 10 秒 Fuzz smoke（最新代码 revision 425,209 execs） | 尚未合并；本地长时间 Fuzz / 真实站点样本验证待执行；尚未接入 Quarantine Reader、ClamAV、Job Worker、数据库状态和 Manifest 持久化 |
 | M3-B Reader & Scanner | Draft PR #5（待集成验收） | 独立只读 S3 Adapter、Unix Socket ClamAV INSTREAM、逐文件 ScanManifest / SHA-256、模拟扫描器和长度限制测试、示例 IAM Policy | 真实 ClamAV / MinIO IAM 负向集成、签名库健康证明、Worker 调用与状态持久化均未完成 |
-| M3-C Validation State | Draft PR #6（CI 与集成验收进行中） | `0004_validation_runs.sql`、源 SHA256/大小绑定、Manifest JSONB 与 SHA256、Scanner 版本/病毒库时间、SKIP LOCKED、UUID 租约 fencing、限次重试、审计、PostgreSQL 并发测试 | 尚未合并；真实 Worker、Scanner VERSION/签名信息提取与 S3 对象字节重算未实现 |
-| M4 Job / Worker | 未实现 | M3-C 提供数据库领取与租约基本接口（未接线） | 真正 Worker Loop、私有磁盘 Spool、续租/取消、真实扫描与证据、Outbox、幂等消费 |
+| M3-C Validation State | Draft PR #6（CI 与集成验收进行中） | `0004_validation_runs.sql`、源 SHA256/大小绑定、Manifest JSONB 与 SHA256、Scanner 版本/病毒库时间、SKIP LOCKED、UUID 租约 fencing、限次重试、审计、PostgreSQL 并发测试 | 尚未合并；M4-A PR #7 已实现 Worker 调用及重算逻辑，但真实 MinIO/ClamAV E2E 尚未运行 |
+| M4-A Worker Pipeline | Draft PR #7（CI 进行中；不能生产发布） | 已有 Worker CLI / 队列补偿、私有 Spool、原始字节 SHA256 复核、HTML/ZIP Validator、逐文件 Scanner 与双 VERSION 证据、失败分类/DB 回写、模拟扫描测试 | 真实 MinIO IAM 与 ClamAV E2E、签名时区校准、磁盘配额、租约续期、生产回滚与部署仍 NOT RUN |
 | M5 Publisher | 未实现 | — | 不可变对象版本、Manifest 校验、原子指针切换、回滚 |
 | M6 Static Gateway | 未实现 | — | Host Mapping、每请求授权、路径规范化、响应安全头 |
 | M7 SSO / Organization | 未实现 | — | OIDC、PKCE、Ticket Exchange、部门 / 项目同步 |
@@ -151,3 +151,14 @@ CI 在 PostgreSQL 18 上运行：
 - `validated` 不等于 `published`，外部 API 仍无验证状态写入口，真正 Worker 尚未实现。
 - CI 发现的 Retryable 状态 CHECK 与旧失败码冲突已经修正；记录于 `docs/gotchas.md`。
 - M3-A 长期 Fuzz、真实 ZIP；M3-B 真实 MinIO IAM / ClamAV 测试仍为 **NOT RUN**，因此整个发布链路仍不能上线。
+
+## M4-A Private Validation Worker（Draft PR #7）
+
+- [PR #7](https://github.com/1998x-stack/visual-platform/pull/7) 基于 PR #6；后者依赖 PR #5 / #4，均仍是 Draft。
+- `cmd/worker` 现在是需要显式私有部署环境的可执行 Worker（`--once`、单消费者轮询），不是公开 HTTP 服务。
+- Worker 会对 `received` Upload Session 执行幂等补偿入队，领取有 5 分钟租约的验证工作，在 4 分钟内部超时内读取私有对象。
+- 私有 Spool 必须是当前 UID 拥有、非 Symlink、0700 的目录；随机文件默认 0600，所有正常返回均删除；崩溃清理与磁盘资源阈值尚需 M4-B。
+- Worker 下载原始源文件并与 DB 绑定 SHA-256 再次比对，同一份 Spool 做 ZIP/HTML Validator 与 ClamAV 逐文件扫描，进程前后读取 `zVERSION`；若版本不一致或签名时间不满足要求，不写入成功。
+- `make migrate` 不再遗漏 0004 的验证状态 Migration；支持 `make worker-once` 和 `make worker-dev`。
+- 本阶段的自动化测试是 Fake Quarantine / Fake ClamAV + 真实 PostgreSQL 的组合；**真实 MinIO IAM 负向测试、真实 ClamAV EICAR、扫描限制与长期 ZIP Fuzz 仍 NOT RUN**。
+- 通过扫描也不意味着浏览器安全，更不意味着 Published。独立 Artifact Origin 和授权网关仍未实现。
